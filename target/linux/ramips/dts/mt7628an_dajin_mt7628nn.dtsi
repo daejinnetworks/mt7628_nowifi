@@ -101,7 +101,7 @@
 
 			partition@50000 {
 				compatible = "denx,uimage";
-				label = "firmware";
+				label = "Kernel";
 				reg = <0x50000 0xfb0000>;
 			};
 		};
