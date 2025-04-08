@@ -27,6 +27,12 @@
 	leds {
 		compatible = "gpio-leds";
 
+		led_power: power {
+			function = LED_FUNCTION_POWER;
+			color = <LED_COLOR_ID_GREEN>;
+			gpios = <&gpio 37 GPIO_ACTIVE_LOW>;
+		};
+
 		wan {
 			function = LED_FUNCTION_WAN;
 			color = <LED_COLOR_ID_GREEN>;
