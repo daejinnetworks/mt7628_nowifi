@@ -27,19 +27,6 @@
 	leds {
 		compatible = "gpio-leds";
 
-		led_power: power {
-			function = LED_FUNCTION_POWER;
-			color = <LED_COLOR_ID_GREEN>;
-			gpios = <&gpio 37 GPIO_ACTIVE_LOW>;
-		};
-
-		wlan {
-			function = LED_FUNCTION_WLAN;
-			color = <LED_COLOR_ID_GREEN>;
-			gpios = <&gpio 44 GPIO_ACTIVE_LOW>;
-			linux,default-trigger = "phy0tpt";
-		};
-
 		wan {
 			function = LED_FUNCTION_WAN;
 			color = <LED_COLOR_ID_GREEN>;
@@ -49,7 +36,7 @@
 		lan {
 			function = LED_FUNCTION_LAN;
 			color = <LED_COLOR_ID_GREEN>;
-			gpios = <&gpio 42 GPIO_ACTIVE_LOW>;
+			gpios = <&gpio 39 GPIO_ACTIVE_LOW>;
 		};
 	};
 };
