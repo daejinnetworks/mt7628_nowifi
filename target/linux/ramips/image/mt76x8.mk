@@ -199,14 +199,14 @@ define Device/d-team_pbr-d1
 endef
 TARGET_DEVICES += d-team_pbr-d1
 
-define Device/dajin_mt7628nn-2p
-  UIMAGE_NAME := n604se
+define Device/vpn_mt7628nn-2p
+  UIMAGE_NAME := vpn
   IMAGE_SIZE := 11264k
-  DEVICE_VENDOR := DAJIN
+  DEVICE_VENDOR := VPN
   DEVICE_MODEL := MT7628NN-NOWIFI
   DEVICE_VARIANT := P2
 endef
-TARGET_DEVICES += dajin_mt7628nn-2p
+TARGET_DEVICES += vpn_mt7628nn-2p
 
 define Device/dlink_dap-1325-a1
   IMAGE_SIZE := 7872k

@@ -1,8 +1,0 @@
-// SPDX-License-Identifier: GPL-2.0-or-later
-
-#include "mt7628an_dajin_mt7628nn.dtsi"
-
-/ {
-	compatible = "dajin,mt7628nn-p2", "mediatek,mt7628an-soc";
-	model = "Dajin MT7628NN-NOWIFI P2";
-};
