@@ -50,7 +50,7 @@ skylab,skw92a)
 	;;
 vpn,mt7628nn-p2)
 	ucidef_set_led_netdev "wan" "WAN" "green:wan" "eth0.2" "link tx rx"
-	ucidef_set_led_netdev "lan" "lan" "green:lan" "eth0.1" "link tx rx"
+	ucidef_set_led_netdev "lan" "LAN" "green:lan" "eth0.1" "link tx rx"
 	;;
 hilink,hlk-7688a)
 	ucidef_set_led_wlan "wlan" "WLAN" "green:wlan" "phy0tpt"
