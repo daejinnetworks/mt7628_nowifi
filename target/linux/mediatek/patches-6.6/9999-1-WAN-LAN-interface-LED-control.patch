@@ -1,0 +1,72 @@
+diff -urN a/drivers/net/ethernet/ralink/esw_rt3050.c b/drivers/net/ethernet/ralink/esw_rt3050.c
+--- a/drivers/net/ethernet/ralink/esw_rt3050.c	2025-04-22 01:08:05.861455884 -0700
++++ b/drivers/net/ethernet/ralink/esw_rt3050.c	2025-05-08 21:45:06.403048852 -0700
+@@ -26,6 +26,9 @@
+ #include "mtk_eth_soc.h"
+ #include "esw_rt3050.h"
+ 
++#include <linux/if_vlan.h>
++#include <linux/netdevice.h>
++
+ /* HW limitations for this switch:
+  * - No large frame support (PKT_MAX_LEN at most 1536)
+  * - Can't have untagged vlan and tagged vlan on one port at the same time,
+@@ -726,24 +729,52 @@
+ 	esw_w32(esw, ~RT305X_ESW_PORT_ST_CHG, RT305X_ESW_REG_IMR);
+ }
+ 
+-
+ int rt3050_esw_has_carrier(struct fe_priv *priv)
+ {
+ 	struct rt305x_esw *esw = priv->soc->swpriv;
++	struct net_device *eth0_dev = priv->netdev;
+ 	u32 link;
+ 	int i;
+ 	bool cpuport;
+-
++	
+ 	link = esw_r32(esw, RT305X_ESW_REG_POA);
+ 	link >>= RT305X_ESW_POA_LINK_SHIFT;
+ 	cpuport = link & BIT(RT305X_ESW_PORT6);
+ 	link &= RT305X_ESW_POA_LINK_MASK;
++	
+ 	for (i = 0; i <= RT305X_ESW_PORT5; i++) {
+-		if (priv->link[i] != (link & BIT(i)))
+-			dev_info(esw->dev, "port %d link %s\n", i, link & BIT(i) ? "up" : "down");
+-		priv->link[i] = link & BIT(i);
++		bool port_link = !!(link & BIT(i));
++		
++		if (priv->link[i] != port_link) {
++			dev_info(esw->dev, "port %d link %s\n", i, port_link ? "up" : "down");
++			
++			if (eth0_dev) {
++				struct net_device *upper_dev;
++				struct list_head *iter;
++				
++				int vlan_id = (i == 0) ? 2 : ((i == 4) ? 1 : -1);
++				
++				if (vlan_id > 0) {
++					rcu_read_lock();
++					netdev_for_each_upper_dev_rcu(eth0_dev, upper_dev, iter) {
++						if (is_vlan_dev(upper_dev) && vlan_id == vlan_dev_vlan_id(upper_dev)) {
++							if (port_link)
++								netif_carrier_on(upper_dev);
++							else
++								netif_carrier_off(upper_dev);
++							
++							dev_info(esw->dev, "Setting carrier %s for interface %s (port %d)\n", 
++									port_link ? "on" : "off", upper_dev->name, i);
++						}
++					}
++					rcu_read_unlock();
++				}
++			}
++		}
++		
++		priv->link[i] = port_link;
+ 	}
+-
++	
+ 	return !!link && cpuport;
+ }
+ 

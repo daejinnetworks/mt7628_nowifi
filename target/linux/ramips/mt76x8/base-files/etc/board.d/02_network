@@ -44,7 +44,6 @@ ramips_setup_interfaces()
 	asus,rt-ac1200-v2|\
 	hilink,hlk-7628n|\
 	hilink,hlk-7688a|\
-	vpn,mt7628nn-p2|\
 	hiwifi,hc5861b|\
 	kroks,kndrt31r16|\
 	skylab,skw92a|\
@@ -66,6 +65,10 @@ ramips_setup_interfaces()
 	zyxel,keenetic-extra-ii)
 		ucidef_add_switch "switch0" \
 			"1:lan" "2:lan" "3:lan" "4:lan" "0:wan" "6@eth0"
+		;;
+	vpn,mt7628nn-p2)
+		ucidef_add_switch "switch0" \
+			"4:lan" "0:wan" "6@eth0"
 		;;
 	asus,rt-n10p-v3|\
 	asus,rt-n11p-b1|\

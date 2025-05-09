@@ -416,7 +416,7 @@ ipcalc() {
 }
 
 find_mtd_index() {
-	local PART="$(grep "\"$1\"" /proc/mtd | awk -F: '{print $1}')"
+	local PART="$(grep -i "\"$1\"" /proc/mtd | awk -F: '{print $1}')"
 	local INDEX="${PART##mtd}"
 
 	echo ${INDEX}
