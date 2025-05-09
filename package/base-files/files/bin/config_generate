@@ -163,6 +163,7 @@ generate_network() {
 			local ipad
 			case "$1" in
 				lan) ipad=${ipaddr:-"192.168.1.1"} ;;
+				wan) ipad=${ipaddr:-"192.168.123.1"} ;;
 				*) ipad=${ipaddr:-"192.168.$((addr_offset++)).1"} ;;
 			esac
 
