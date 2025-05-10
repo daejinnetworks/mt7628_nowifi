@@ -26,6 +26,9 @@
 #include "mtk_eth_soc.h"
 #include "esw_rt3050.h"
 
+#include <linux/if_vlan.h>
+#include <linux/netdevice.h>
+
 /* HW limitations for this switch:
  * - No large frame support (PKT_MAX_LEN at most 1536)
  * - Can't have untagged vlan and tagged vlan on one port at the same time,
@@ -726,46 +729,89 @@ static void esw_hw_init(struct rt305x_esw *esw)
 	esw_w32(esw, ~RT305X_ESW_PORT_ST_CHG, RT305X_ESW_REG_IMR);
 }
 
-
 int rt3050_esw_has_carrier(struct fe_priv *priv)
 {
 	struct rt305x_esw *esw = priv->soc->swpriv;
-	u32 link;
-	int i;
-	bool cpuport;
-
-	link = esw_r32(esw, RT305X_ESW_REG_POA);
+	struct net_device *eth0_dev = priv->netdev;
+	u32 link = esw_r32(esw, RT305X_ESW_REG_POA);
 	link >>= RT305X_ESW_POA_LINK_SHIFT;
-	cpuport = link & BIT(RT305X_ESW_PORT6);
+	bool cpuport = link & BIT(RT305X_ESW_PORT6);
 	link &= RT305X_ESW_POA_LINK_MASK;
-	for (i = 0; i <= RT305X_ESW_PORT5; i++) {
-		if (priv->link[i] != (link & BIT(i)))
-			dev_info(esw->dev, "port %d link %s\n", i, link & BIT(i) ? "up" : "down");
-		priv->link[i] = link & BIT(i);
-	}
 
+	for (int i = 0; i <= RT305X_ESW_PORT5; i++) {
+		bool port_link = !!(link & BIT(i));
+		if (priv->link[i] != port_link) {
+			int vlan_id = (i == 0) ? 2 : ((i == 4) ? 1 : -1);
+			if (vlan_id > 0 && eth0_dev) {
+				struct net_device *upper_dev;
+				struct list_head *iter;
+				rcu_read_lock();
+				netdev_for_each_upper_dev_rcu(eth0_dev, upper_dev, iter) {
+					if (is_vlan_dev(upper_dev) && vlan_id == vlan_dev_vlan_id(upper_dev)) {
+						if (port_link)
+							netif_carrier_on(upper_dev);
+						else
+							netif_carrier_off(upper_dev);
+					}
+				}
+				rcu_read_unlock();
+			}
+		}
+		priv->link[i] = port_link;
+	}
 	return !!link && cpuport;
 }
 
+// 포트-인터페이스 매핑 구조
+struct {
+    int port;
+    int vlan_id;
+    int led_reg;
+    const char *ifname;
+} port_map[] = {
+    {0, 2, RT305X_ESW_REG_P0LED, "eth0.2"}, // WAN
+    {4, 1, RT305X_ESW_REG_P4LED, "eth0.1"}, // LAN
+};
+
+// 인터럽트 핸들러에서
 static irqreturn_t esw_interrupt(int irq, void *_esw)
 {
-	struct rt305x_esw *esw = (struct rt305x_esw *) _esw;
-	u32 status;
+    struct rt305x_esw *esw = (struct rt305x_esw *) _esw;
+    u32 status = esw_r32(esw, RT305X_ESW_REG_ISR);
+    u32 reg_poa, port_link_status_map;
+    int i;
 
-	status = esw_r32(esw, RT305X_ESW_REG_ISR);
-	if (status & RT305X_ESW_PORT_ST_CHG) {
-		if (!esw->priv)
-			goto out;
-		if (rt3050_esw_has_carrier(esw->priv))
-			netif_carrier_on(esw->priv->netdev);
-		else
-			netif_carrier_off(esw->priv->netdev);
-	}
+    if (status & RT305X_ESW_PORT_ST_CHG) {
+        reg_poa = esw_r32(esw, RT305X_ESW_REG_POA);
+        port_link_status_map = (reg_poa >> RT305X_ESW_LINK_S) & RT305X_ESW_POA_LINK_MASK;
 
-out:
-	esw_w32(esw, status, RT305X_ESW_REG_ISR);
+        // 모든 LED OFF
+        for (i = 0; i < RT305X_ESW_NUM_LEDS; i++)
+            esw_w32(esw, RT305X_ESW_LED_OFF, RT305X_ESW_REG_P0LED + 4*i);
 
-	return IRQ_HANDLED;
+        // 각 포트별로만 LED/Carrier 제어
+        for (i = 0; i < ARRAY_SIZE(port_map); i++) {
+            bool link = !!(port_link_status_map & BIT(port_map[i].port));
+            // LED 제어
+            esw_w32(esw, link ? RT305X_ESW_LED_LINKACT : RT305X_ESW_LED_OFF, port_map[i].led_reg);
+
+            // VLAN 인터페이스 carrier 제어
+            struct net_device *dev = dev_get_by_name(&init_net, port_map[i].ifname);
+            if (dev) {
+                if (link) {
+                    if (!netif_carrier_ok(dev))
+                        netif_carrier_on(dev);
+                } else {
+                    if (netif_carrier_ok(dev))
+                        netif_carrier_off(dev);
+                }
+                dev_put(dev);
+            }
+        }
+    }
+
+    esw_w32(esw, status, RT305X_ESW_REG_ISR);
+    return IRQ_HANDLED;
 }
 
 static int esw_apply_config(struct switch_dev *dev)
