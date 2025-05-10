@@ -1,8 +1,8 @@
 include $(TOPDIR)/rules.mk
 include $(INCLUDE_DIR)/kernel.mk
 
-PKG_VERSION:=2024.10
-PKG_HASH:=b28daf4ac17e43156363078bf510297584137f6df50fced9b12df34f61a92fb0
+PKG_VERSION:=mtk.lss
+PKG_HASH:=45ccb136e0c0bda40422faf3d4bdbbbeb1e74d324a7686d20acf0e476f74c274
 PKG_BUILD_DEPENDS:=!(TARGET_ramips||TARGET_mediatek_mt7623):arm-trusted-firmware-tools/host
 
 UBOOT_USE_INTREE_DTC:=1
