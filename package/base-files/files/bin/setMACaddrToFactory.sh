@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/ash
 
 # Get ethaddr by fw_printenv
 dump_ethaddr=$(/usr/sbin/fw_printenv | grep '^ethaddr' | tr '\n' ' ')
