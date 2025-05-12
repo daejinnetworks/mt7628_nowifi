@@ -208,6 +208,14 @@ define Device/vpn_mt7628nn-2p
 endef
 TARGET_DEVICES += vpn_mt7628nn-2p
 
+define Device/ui_mt7628nn-2pv
+  UIMAGE_NAME := UI-2PV
+  IMAGE_SIZE := 11264k
+  DEVICE_VENDOR := UI
+  DEVICE_MODEL := UI-2PV
+endef
+TARGET_DEVICES += ui_mt7628nn-2pv
+
 define Device/dlink_dap-1325-a1
   IMAGE_SIZE := 7872k
   DEVICE_VENDOR := D-Link

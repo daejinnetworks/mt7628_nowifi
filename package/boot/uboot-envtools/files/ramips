@@ -68,7 +68,10 @@ zte,mf283plus)
 	ubootenv_add_uci_config "/dev/mtd1" "0x0" "0x1000" "0x10000"
 	;;
 vpn,mt7628nn-p2)
-	ubootenv_add_uci_config "/dev/mtd1" "0x0" "0x10000" "0x10000" "1"
+	ubootenv_add_uci_config "/dev/mtd1" "0x0" "0x1000" "0x10000" "1"
+	;;
+ui,mt7628nn-2pv)
+	ubootenv_add_uci_config "/dev/mtd1" "0x0" "0x1000" "0x10000" "1"
 	;;
 asus,rt-ax53u|\
 asus,rt-ax54|\
