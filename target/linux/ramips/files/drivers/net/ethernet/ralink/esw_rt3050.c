@@ -729,6 +729,17 @@ static void esw_hw_init(struct rt305x_esw *esw)
 	esw_w32(esw, ~RT305X_ESW_PORT_ST_CHG, RT305X_ESW_REG_IMR);
 }
 
+// 포트-인터페이스 매핑 구조
+struct {
+    int port;
+    int vlan_id;
+    int led_reg;
+    const char *ifname;
+} port_map[] = {
+    {0, 1, RT305X_ESW_REG_P0LED, "eth0.1"}, // LAN
+    {4, 2, RT305X_ESW_REG_P4LED, "eth0.2"}, // WAN
+};
+
 int rt3050_esw_has_carrier(struct fe_priv *priv)
 {
 	struct rt305x_esw *esw = priv->soc->swpriv;
@@ -737,11 +748,18 @@ int rt3050_esw_has_carrier(struct fe_priv *priv)
 	link >>= RT305X_ESW_POA_LINK_SHIFT;
 	bool cpuport = link & BIT(RT305X_ESW_PORT6);
 	link &= RT305X_ESW_POA_LINK_MASK;
+	int i, j;
+	int vlan_id;
 
-	for (int i = 0; i <= RT305X_ESW_PORT5; i++) {
+	for (i = 0; i <= RT305X_ESW_PORT5; i++) {
 		bool port_link = !!(link & BIT(i));
-		if (priv->link[i] != port_link) {
-			int vlan_id = (i == 0) ? 2 : ((i == 4) ? 1 : -1);
+		if (priv->link[i] != port_link) {		
+			for (j = 0; j < ARRAY_SIZE(port_map); j++) {
+				if (port_map[j].port == i) {
+					vlan_id = port_map[j].vlan_id;
+					break;
+				}
+			}
 			if (vlan_id > 0 && eth0_dev) {
 				struct net_device *upper_dev;
 				struct list_head *iter;
@@ -761,17 +779,6 @@ int rt3050_esw_has_carrier(struct fe_priv *priv)
 	}
 	return !!link && cpuport;
 }
-
-// 포트-인터페이스 매핑 구조
-struct {
-    int port;
-    int vlan_id;
-    int led_reg;
-    const char *ifname;
-} port_map[] = {
-    {0, 2, RT305X_ESW_REG_P0LED, "eth0.2"}, // WAN
-    {4, 1, RT305X_ESW_REG_P4LED, "eth0.1"}, // LAN
-};
 
 // 인터럽트 핸들러에서
 static irqreturn_t esw_interrupt(int irq, void *_esw)
