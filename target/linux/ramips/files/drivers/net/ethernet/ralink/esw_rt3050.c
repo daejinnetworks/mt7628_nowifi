@@ -737,8 +737,8 @@ struct {
     int led_reg;
     const char *ifname;
 } port_map[] = {
-    {0, 1, RT305X_ESW_REG_P4LED, "eth0.1"}, // LAN
-    {4, 2, RT305X_ESW_REG_P0LED, "eth0.2"}, // WAN
+    {0, 1, RT305X_ESW_REG_P0LED, "eth0.1"}, // LAN
+    {4, 2, RT305X_ESW_REG_P4LED, "eth0.2"}, // WAN
 };
 
 int rt3050_esw_has_carrier(struct fe_priv *priv)
