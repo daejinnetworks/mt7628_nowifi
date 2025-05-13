@@ -737,41 +737,14 @@ struct {
     int led_reg;
     const char *ifname;
 } port_map[] = {
-    {4, 2, RT305X_ESW_REG_P4LED, "eth0.2"}, // WAN
-    {0, 1, RT305X_ESW_REG_P0LED, "eth0.1"}, // LAN
+    {0, 1, RT305X_ESW_REG_P4LED, "eth0.1"}, // LAN
+    {4, 2, RT305X_ESW_REG_P0LED, "eth0.2"}, // WAN
 };
 
 int rt3050_esw_has_carrier(struct fe_priv *priv)
 {
-	struct rt305x_esw *esw = priv->soc->swpriv;
-	struct net_device *eth0_dev = priv->netdev;
-	u32 link = esw_r32(esw, RT305X_ESW_REG_POA);
-	link >>= RT305X_ESW_POA_LINK_SHIFT;
-	bool cpuport = link & BIT(RT305X_ESW_PORT6);
-	link &= RT305X_ESW_POA_LINK_MASK;
 
-	for (int i = 0; i <= RT305X_ESW_PORT5; i++) {
-		bool port_link = !!(link & BIT(i));
-		if (priv->link[i] != port_link) {
-			int vlan_id = (i == 0) ? 2 : ((i == 4) ? 1 : -1);
-			if (vlan_id > 0 && eth0_dev) {
-				struct net_device *upper_dev;
-				struct list_head *iter;
-				rcu_read_lock();
-				netdev_for_each_upper_dev_rcu(eth0_dev, upper_dev, iter) {
-					if (is_vlan_dev(upper_dev) && vlan_id == vlan_dev_vlan_id(upper_dev)) {
-						if (port_link)
-							netif_carrier_on(upper_dev);
-						else
-							netif_carrier_off(upper_dev);
-					}
-				}
-				rcu_read_unlock();
-			}
-		}
-		priv->link[i] = port_link;
-	}
-	return !!link && cpuport;
+	return 0;
 }
 
 
@@ -787,23 +760,31 @@ static irqreturn_t esw_interrupt(int irq, void *_esw)
         reg_poa = esw_r32(esw, RT305X_ESW_REG_POA);
         port_link_status_map = (reg_poa >> RT305X_ESW_LINK_S) & RT305X_ESW_POA_LINK_MASK;
 
+        //dev_info(esw->dev, "ESW: Port status change detected, link map: 0x%x\n", port_link_status_map);
+
         // 각 포트별로만 LED/Carrier 제어
         for (i = 0; i < ARRAY_SIZE(port_map); i++) {
             bool link = !!(port_link_status_map & BIT(port_map[i].port));
-            // LED 제어
-            esw_w32(esw, link ? RT305X_ESW_LED_LINKACT : RT305X_ESW_LED_OFF, port_map[i].led_reg);
 
             // VLAN 인터페이스 carrier 제어
             struct net_device *dev = dev_get_by_name(&init_net, port_map[i].ifname);
             if (dev) {
                 if (link) {
-                    if (!netif_carrier_ok(dev))
+                    if (!netif_carrier_ok(dev)) {
+                        dev_info(esw->dev, "ESW: Setting carrier ON for %s\n", port_map[i].ifname);
                         netif_carrier_on(dev);
+						esw_w32(esw, RT305X_ESW_LED_LINKACT, port_map[i].led_reg);
+                    }
                 } else {
-                    if (netif_carrier_ok(dev))
+                    if (netif_carrier_ok(dev)) {
+                        dev_info(esw->dev, "ESW: Setting carrier OFF for %s\n", port_map[i].ifname);
                         netif_carrier_off(dev);
+						esw_w32(esw, RT305X_ESW_LED_OFF, port_map[i].led_reg);
+                    }
                 }
                 dev_put(dev);
+            } else {
+                dev_warn(esw->dev, "ESW: Interface %s not found\n", port_map[i].ifname);
             }
         }
     }
