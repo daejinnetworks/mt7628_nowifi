@@ -783,8 +783,6 @@ static irqreturn_t esw_interrupt(int irq, void *_esw)
                     }
                 }
                 dev_put(dev);
-            } else {
-                dev_warn(esw->dev, "ESW: Interface %s not found\n", port_map[i].ifname);
             }
         }
     }
