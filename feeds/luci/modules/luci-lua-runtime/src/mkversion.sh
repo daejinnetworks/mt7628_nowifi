@@ -19,6 +19,9 @@ else
 	distversion = "Development Snapshot"
 end
 
+distname    = "UI-2PV"
+distversion = "V0.9.1"
+
 luciname    = "${3:-LuCI}"
 luciversion = "${2:-Git}"
 EOF

@@ -2,6 +2,7 @@
 'require baseclass';
 'require fs';
 'require rpc';
+'require uci';
 
 var callLuciVersion = rpc.declare({
 	object: 'luci',
@@ -25,16 +26,27 @@ return baseclass.extend({
 		return Promise.all([
 			L.resolveDefault(callSystemBoard(), {}),
 			L.resolveDefault(callSystemInfo(), {}),
-			L.resolveDefault(callLuciVersion(), { revision: _('unknown version'), branch: 'LuCI' })
+			fs.lines('/usr/lib/lua/luci/version.lua'),
+			uci.load('system')
 		]);
 	},
 
 	render: function(data) {
 		var boardinfo   = data[0],
 		    systeminfo  = data[1],
-		    luciversion = data[2];
+		    version_info = data[2];
 
-		luciversion = luciversion.branch + ' ' + luciversion.revision;
+		var parseVersionLine = function(pattern) {
+			var lastLine = '';
+			version_info.forEach(function(l) {
+				if (l.match(new RegExp('^\\s*' + pattern + '\\s*=')))
+					lastLine = l;
+			});
+			return lastLine ? lastLine.replace(/^\s*\w+\s*=\s*['"]([^'"]+)['\"].*$/, '$1') : '';
+		};
+
+		var distname = parseVersionLine('distname');
+		var distversion = parseVersionLine('distversion');
 
 		var datestr = null;
 
@@ -52,11 +64,11 @@ return baseclass.extend({
 		}
 
 		var fields = [
-			_('Hostname'),         boardinfo.hostname,
+			_('Hostname'),         distname,
 			_('Model'),            boardinfo.model,
 			_('Architecture'),     boardinfo.system,
 			_('Target Platform'),  (L.isObject(boardinfo.release) ? boardinfo.release.target : ''),
-			_('Firmware Version'), (L.isObject(boardinfo.release) ? boardinfo.release.description + ' / ' : '') + (luciversion || ''),
+			_('Firmware Version'), distversion,
 			_('Kernel Version'),   boardinfo.kernel,
 			_('Local Time'),       datestr,
 			_('Uptime'),           systeminfo.uptime ? '%t'.format(systeminfo.uptime) : null,
