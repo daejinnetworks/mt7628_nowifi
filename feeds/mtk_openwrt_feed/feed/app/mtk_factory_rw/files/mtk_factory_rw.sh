@@ -212,7 +212,7 @@ SetModel()
 # 2. Set/Get the offset data: mtk_factory -r/-w length offset /data
 # 3. Overwrite from offset1 to offset2 by length byte : mtk_factory -o length from to
 if [ "$1" == "-r" ]; then
-	if [ "$2" == "lan" -o "$2" == "lan2" -o "$2" == "wan" -o "$2" == "serial_no" -o "$2" == "model" ]; then
+	if [ "$2" == "lan" -o "$2" == "lan2" -o "$2" == "wan" ]; then
 		GetMac $2
 	elif [ "$2" == "serial_no" ]; then
 		GetSerial $2

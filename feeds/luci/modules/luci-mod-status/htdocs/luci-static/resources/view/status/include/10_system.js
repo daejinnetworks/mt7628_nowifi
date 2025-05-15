@@ -19,6 +19,24 @@ var callSystemInfo = rpc.declare({
 	method: 'info'
 });
 
+function hexToString(hexStr) {
+	if (!hexStr) return '';
+
+	// hexStr: "31-32-33-34-35-36-37-38-39-30-00-00-00-00-00-00"
+	const ascii = hexStr
+		.replace(/-/g, ' ')
+		.split(' ')
+		.map(h => String.fromCharCode(parseInt(h, 16)))
+		.join('')
+		.replace(/\0/g, '') // null 문자 제거
+		.trim();
+
+	// ASCII printable check: 32~126
+	const isPrintable = ascii.length > 0 && /^[\x20-\x7E]+$/.test(ascii);
+
+	return isPrintable ? ascii : hexStr;
+}
+
 return baseclass.extend({
 	title: _('System'),
 
@@ -27,14 +45,27 @@ return baseclass.extend({
 			L.resolveDefault(callSystemBoard(), {}),
 			L.resolveDefault(callSystemInfo(), {}),
 			fs.lines('/usr/lib/lua/luci/version.lua'),
-			uci.load('system')
+			uci.load('system'),
+			fs.exec('/sbin/mtk_factory_rw.sh', ['-r', 'model']).catch(function(err) {
+				console.error('Failed to read model:', err);
+				return { stdout: '' };
+			}),
+			fs.exec('/sbin/mtk_factory_rw.sh', ['-r', 'serial_no']).catch(function(err) {
+				console.error('Failed to read serial:', err);
+				return { stdout: '' };
+			})
 		]);
 	},
 
 	render: function(data) {
 		var boardinfo   = data[0],
 		    systeminfo  = data[1],
-		    version_info = data[2];
+		    version_info = data[2],
+		    model_hex = data[4] ? data[4].stdout.trim() : '',
+		    serial_hex = data[5] ? data[5].stdout.trim() : '';
+
+		var model_str = hexToString(model_hex);
+		var serial_str = hexToString(serial_hex);
 
 		var parseVersionLine = function(pattern) {
 			var lastLine = '';
@@ -65,9 +96,9 @@ return baseclass.extend({
 
 		var fields = [
 			_('Hostname'),         distname,
-			_('Model'),            boardinfo.model,
+			_('Model'),            model_str,
 			_('Architecture'),     boardinfo.system,
-			_('Target Platform'),  (L.isObject(boardinfo.release) ? boardinfo.release.target : ''),
+			_('Serial Number'),    serial_str,
 			_('Firmware Version'), distversion,
 			_('Kernel Version'),   boardinfo.kernel,
 			_('Local Time'),       datestr,

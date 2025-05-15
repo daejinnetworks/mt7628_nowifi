@@ -7,7 +7,8 @@
 				"/proc/sys/net/netfilter/nf_conntrack_count": [ "read" ],
 				"/proc/sys/net/netfilter/nf_conntrack_max": [ "read" ],
 				"/www/luci-static/resources/view/status/include": [ "list" ],
-				"/usr/lib/lua/luci/version.lua": [ "read" ]
+				"/usr/lib/lua/luci/version.lua": [ "read" ],
+				"/sbin/mtk_factory_rw.sh": [ "read", "exec" ]
 			},
 			"ubus": {
 				"luci": [ "getVersion" ],
