@@ -178,7 +178,7 @@ SetMac()
 
 SetSerial()
 {
-	if [ "$#" != "4" ]; then
+	if [ "$#" != "19" ]; then
 		echo "Invalid parameter. only need one string"
 		exit 1
 	fi
@@ -194,7 +194,7 @@ SetSerial()
 
 SetModel()
 {
-	if [ "$#" != "4" ]; then
+	if [ "$#" != "35" ]; then
 		echo "Invalid parameter. only need one string"
 		exit 1
 	fi
