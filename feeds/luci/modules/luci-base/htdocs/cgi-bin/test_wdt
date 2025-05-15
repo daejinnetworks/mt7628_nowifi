@@ -37,8 +37,10 @@ local function control_watchdog_test(mode)
     if mode == "start" then
         -- Start watchdog with magicclose
         local ret = execute_command("ubus call system watchdog '{\"magicclose\":true}'")
-        if ret then
-            print("Watchdog status: " .. ret)
+        local rv = execute_command("ubus call system watchdog '{\"stop\":true}'")
+        local result = execute_command("ubus call system watchdog '{\"timeout\":10}'")
+        if result then
+            print("Watchdog status: " .. result)
             -- Write to watchdog device
             local wdt_ret = os.execute("echo 1 > /dev/watchdog")
             if wdt_ret == 0 then
@@ -48,14 +50,6 @@ local function control_watchdog_test(mode)
             end
         end
         return false, "Failed to start watchdog via ubus"
-    elseif mode == "stop" then
-        -- Stop watchdog
-        local ret = execute_command("ubus call system watchdog '{\"stop\":true}'")
-        if ret then
-            print("Watchdog status: " .. ret)
-            return true, "Watchdog stopped successfully"
-        end
-        return false, "Failed to stop watchdog via ubus"
     end
     return false, "Invalid mode"
 end
@@ -79,8 +73,7 @@ if mode then
         print(message)
         if mode == "start" then
             print("\nWatchdog is now running.")
-            print("The system will reboot if the watchdog is not fed within the timeout period.")
-            print("To stop the watchdog, use: ?mode=stop")
+            print("The system will reboot if the watchdog is not fed within the timeout(10 seconds) period.")
         end
     else
         print("Error: " .. message)
