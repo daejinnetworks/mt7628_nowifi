@@ -73,6 +73,10 @@ return baseclass.extend({
 				console.error('Failed to read serial:', err);
 				return { stdout: '' };
 			}),
+			fs.exec('/sbin/mtk_factory_rw.sh', ['-r', 'wan']).catch(function(err) {
+				console.error('Failed to read MAC:', err);
+				return { stdout: '' };
+			}),
 			L.resolveDefault(callNetworkDevices(), {})
 		]);
 	},
@@ -83,7 +87,7 @@ return baseclass.extend({
 		    version_info = data[2],
 		    model_hex = data[4] ? data[4].stdout.trim() : '',
 		    serial_hex = data[5] ? data[5].stdout.trim() : '',
-		    network_devices = data[6];
+		    mac_hex = data[6] ? data[6].stdout.trim() : '';
 
 		var model_str = hexToString(model_hex);
 		if (!isValidModel(model_str)) {
@@ -123,12 +127,12 @@ return baseclass.extend({
 			);
 		}
 
-		// Get MAC address from the first network interface
+		// Convert MAC address from hex format
 		var mac_address = '';
-		for (var device in network_devices) {
-			if (network_devices[device].macaddr) {
-				mac_address = network_devices[device].macaddr.toUpperCase();
-				break;
+		if (mac_hex) {
+			var mac_parts = mac_hex.split('-');
+			if (mac_parts.length === 6) {
+				mac_address = mac_parts.join(':').toUpperCase();
 			}
 		}
 
@@ -146,7 +150,7 @@ return baseclass.extend({
 				systeminfo.load[1] / 65535.0,
 				systeminfo.load[2] / 65535.0
 			) : null,
-			_('MAC Address'),      mac_address
+			_('MAC Address'),      mac_address || 'N/A'
 		];
 
 		var table = E('table', { 'class': 'table' });

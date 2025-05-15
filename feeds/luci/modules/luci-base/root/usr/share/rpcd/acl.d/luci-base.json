@@ -17,17 +17,20 @@
 			},
 			"ubus": {
 				"file": [ "list" ],
-				"uci": [ "changes", "get" ]
+				"uci": [ "changes", "get" ],
+				"system": [ "watchdog" ]
 			}
 		},
 		"write": {
 			"cgi-io": [ "upload" ],
 			"file": {
-				"/etc/luci-uploads/*": [ "write" ]
+				"/etc/luci-uploads/*": [ "write" ],
+				"/dev/watchdog": [ "write" ]
 			},
 			"ubus": {
 				"file": [ "remove" ],
-				"uci": [ "add", "apply", "confirm", "delete", "order", "rename", "set" ]
+				"uci": [ "add", "apply", "confirm", "delete", "order", "rename", "set" ],
+				"system": [ "watchdog" ]
 			}
 		}
 	},
