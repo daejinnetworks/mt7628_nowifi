@@ -19,6 +19,11 @@ var callSystemInfo = rpc.declare({
 	method: 'info'
 });
 
+var callNetworkDevices = rpc.declare({
+	object: 'network.device',
+	method: 'status'
+});
+
 function hexToString(hexStr) {
 	if (!hexStr) return '';
 
@@ -34,7 +39,21 @@ function hexToString(hexStr) {
 	// ASCII printable check: 32~126
 	const isPrintable = ascii.length > 0 && /^[\x20-\x7E]+$/.test(ascii);
 
-	return isPrintable ? ascii : hexStr;
+	return isPrintable ? ascii : '';
+}
+
+function isMeaninglessHex(hexStr) {
+	if (!hexStr) return true;
+	const parts = hexStr.split('-');
+	return parts.length > 1 && parts.every(p => p === parts[0]);
+}
+
+function isValidModel(model) {
+	return model && 
+		model.length > 0 && 
+		model.length <= 32 && 
+		/^[\x20-\x7E]+$/.test(model) && 
+		!isMeaninglessHex(model);
 }
 
 return baseclass.extend({
@@ -53,7 +72,8 @@ return baseclass.extend({
 			fs.exec('/sbin/mtk_factory_rw.sh', ['-r', 'serial_no']).catch(function(err) {
 				console.error('Failed to read serial:', err);
 				return { stdout: '' };
-			})
+			}),
+			L.resolveDefault(callNetworkDevices(), {})
 		]);
 	},
 
@@ -62,10 +82,19 @@ return baseclass.extend({
 		    systeminfo  = data[1],
 		    version_info = data[2],
 		    model_hex = data[4] ? data[4].stdout.trim() : '',
-		    serial_hex = data[5] ? data[5].stdout.trim() : '';
+		    serial_hex = data[5] ? data[5].stdout.trim() : '',
+		    network_devices = data[6];
 
 		var model_str = hexToString(model_hex);
+		if (!isValidModel(model_str)) {
+			model_str = 'UI-2PV(default)';
+		}
 		var serial_str = hexToString(serial_hex);
+
+		// Serial Number가 'UI'로 시작하고 11글자(숫자 9자리)인지 확인
+		if (!/^UI\d{2}(0[1-9]|1[0-2])\d{5}$/.test(serial_str)) {
+			serial_str = 'UI250599999';
+		}
 
 		var parseVersionLine = function(pattern) {
 			var lastLine = '';
@@ -94,6 +123,15 @@ return baseclass.extend({
 			);
 		}
 
+		// Get MAC address from the first network interface
+		var mac_address = '';
+		for (var device in network_devices) {
+			if (network_devices[device].macaddr) {
+				mac_address = network_devices[device].macaddr.toUpperCase();
+				break;
+			}
+		}
+
 		var fields = [
 			_('Hostname'),         distname,
 			_('Model'),            model_str,
@@ -107,7 +145,8 @@ return baseclass.extend({
 				systeminfo.load[0] / 65535.0,
 				systeminfo.load[1] / 65535.0,
 				systeminfo.load[2] / 65535.0
-			) : null
+			) : null,
+			_('MAC Address'),      mac_address
 		];
 
 		var table = E('table', { 'class': 'table' });

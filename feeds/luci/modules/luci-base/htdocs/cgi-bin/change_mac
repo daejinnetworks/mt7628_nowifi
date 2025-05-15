@@ -69,11 +69,11 @@ if new_mac then
         os.execute("ifdown " .. interface .. " && ifup " .. interface)
 
         -- 결과 메시지 출력
-        print("MAC 주소가 성공적으로 변경되었습니다: " .. new_mac .. " (eth0.2), " .. incremented_mac .. " (eth0.1)")
+        print("MAC address has been successfully changed: " .. new_mac .. " (eth0.2), " .. incremented_mac .. " (eth0.1)")
     else
-        print("잘못된 MAC 주소 형식입니다.")
+        print("Invalid MAC address format.")
     end
 else
-    print("MAC 주소를 입력해주세요.")
+    print("Please provide a MAC address.")
 end
 
