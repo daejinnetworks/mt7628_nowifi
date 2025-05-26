@@ -1,0 +1,97 @@
+#!/usr/bin/lua
+
+-- swconfig 결과 파싱 함수
+local function get_port_status()
+    local ports = { ["0"] = {}, ["4"] = {}, ["6"] = {} }
+    local current_port = nil
+    for line in io.popen("swconfig dev switch0 show"):lines() do
+        local port = line:match("^Port (%d+):")
+        if port and ports[port] then
+            current_port = port
+        elseif current_port then
+            local link, speed, duplex = line:match("link:%s*port:%d+ link:(%w+)%s*speed:([%w]+)%s*([%w%-]+)")
+            if link then
+                ports[current_port].link = link
+                ports[current_port].speed = speed
+                ports[current_port].duplex = duplex
+            end
+        end
+    end
+    return ports
+end
+
+local ports = get_port_status()
+
+-- LED 상태 결정
+local function led_state(port)
+    if port == "6" then
+        return (ports["6"].link == "up") and "on" or "off"
+    elseif port == "0" then
+        return (ports["0"].link == "up") and "on" or "off"
+    elseif port == "4" then
+        return (ports["4"].link == "up") and "on" or "off"
+    end
+    return "off"
+end
+
+-- 속도 추출
+local function port_speed(port)
+    return ports[port] and ports[port].speed or "-"
+end
+
+local function port_duplex(port)
+    return ports[port] and ports[port].duplex or "-"
+end
+
+print("Content-type: text/html; charset=UTF-8\n")
+print([[<!DOCTYPE html>
+<html>
+<head>
+    <title>LED/Port Connection Test</title>
+    <style>
+        body { font-family: Arial; margin: 30px; }
+        .led-row { display: flex; justify-content: center; margin-bottom: 30px; }
+        .led-block { text-align: center; width: 180px; }
+        .led-circle {
+            width: 32px; height: 32px; border-radius: 50%;
+            margin: 0 auto 10px auto; border: 2px solid #888;
+            background: #222;
+        }
+        .led-on { background: #0f0; box-shadow: 0 0 10px #0f0; }
+        .led-off { background: #444; }
+        .speed-table { margin: 0 auto; border-collapse: collapse; }
+        .speed-table th, .speed-table td { border: 1px solid #aaa; padding: 8px 16px; }
+    </style>
+</head>
+<body>
+    <script>
+        setInterval(function() {
+            location.reload();
+        }, 1000);
+    </script>
+    <div class="led-row">
+        <div class="led-block">
+            <div class="led-circle led-]] .. led_state("6") .. [["></div>
+            CPU Link
+        </div>
+        <div class="led-block">
+            <div class="led-circle led-]] .. led_state("0") .. [["></div>
+            Wall-pad Link
+        </div>
+        <div class="led-block">
+            <div class="led-circle led-]] .. led_state("4") .. [["></div>
+            LAN Link
+        </div>
+    </div>
+    <div style="text-align:center; margin-bottom:20px;">
+        <i>If there is no hardware issue, the CPU Link will always be connected at 1000Base-T.</i>
+    </div>
+    <table class="speed-table">
+        <tr><th>Port</th><th>Speed</th><th>Duplex</th></tr>
+        <tr><td>CPU Link</td><td>]] .. port_speed("6") .. [[</td><td>]] .. port_duplex("6") .. [[</td></tr>
+        <tr><td>Wall-pad Link</td><td>]] .. port_speed("0") .. [[</td><td>]] .. port_duplex("0") .. [[</td></tr>
+        <tr><td>LAN Link</td><td>]] .. port_speed("4") .. [[</td><td>]] .. port_duplex("4") .. [[</td></tr>
+    </table>
+</body>
+</html>
+]])
