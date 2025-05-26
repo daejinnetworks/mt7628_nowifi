@@ -3,6 +3,8 @@
 . /lib/functions.sh
 
 OVERLAY="$( grep ' /overlay ' /proc/mounts )"
+DEV_CONSOLE="/dev/console"
+TEST_MODE_LOG="/tmp/button_test.log"
 TEST_MODE_FILE="/tmp/button_test_mode"
 
 case "$ACTION" in
@@ -10,14 +12,14 @@ pressed)
 	[ -z "$OVERLAY" ] && return 0
 
 	if [ -f "$TEST_MODE_FILE" ]; then
-		echo "[TEST MODE] Button pressed event" > /dev/console
+		echo "[TEST MODE] Button pressed event" | tee -a $DEV_CONSOLE $TEST_MODE_LOG
 	fi
 
 	return 5
 ;;
 timeout)
 	if [ -f "$TEST_MODE_FILE" ]; then
-		echo "[TEST MODE] Button pressed more 5secs" > /dev/console
+		echo "[TEST MODE] Button pressed more 5secs" | tee -a $DEV_CONSOLE $TEST_MODE_LOG
 	else
 		. /etc/diag.sh
 		set_state failsafe
@@ -26,20 +28,20 @@ timeout)
 released)
 	if [ "$SEEN" -lt 1 ]
 	then
-		echo "REBOOT" > /dev/console
+		echo "REBOOT" | tee -a $DEV_CONSOLE $TEST_MODE_LOG
 		sync
 		if [ -f "$TEST_MODE_FILE" ]; then
-			echo "[TEST MODE] Button released event" > /dev/console
-			echo "[TEST MODE] Button pressed for less than 1 second" > /dev/console
+			echo "[TEST MODE] Button released event" | tee -a $DEV_CONSOLE $TEST_MODE_LOG
+			echo "[TEST MODE] Button pressed for less than 1 second" | tee -a $DEV_CONSOLE $TEST_MODE_LOG
 		else
 			reboot
 		fi
 	elif [ "$SEEN" -ge 5 -a -n "$OVERLAY" ]
 	then
-		echo "FACTORY RESET" > /dev/console
+		echo "FACTORY RESET" | tee -a $DEV_CONSOLE $TEST_MODE_LOG
 		if [ -f "$TEST_MODE_FILE" ]; then
-			echo "[TEST MODE] Button released event" > /dev/console
-			echo "[TEST MODE] Button pressed for 5 or more seconds" > /dev/console
+			echo "[TEST MODE] Button released event" | tee -a $DEV_CONSOLE $TEST_MODE_LOG
+			echo "[TEST MODE] Button pressed for 5 or more seconds" | tee -a $DEV_CONSOLE $TEST_MODE_LOG
 		else
 			jffs2reset -y && reboot &
 		fi

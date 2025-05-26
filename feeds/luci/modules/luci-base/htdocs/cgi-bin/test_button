@@ -1,9 +1,6 @@
 #!/usr/bin/lua
 require "uci"
 
--- HTTP header
-print("Content-type: text/plain; charset=UTF-8\n\n")
-
 -- Query string parser
 local function parse_query_string()
     local qs = os.getenv("QUERY_STRING") or ""
@@ -21,72 +18,128 @@ local function urldecode(str)
     return str
 end
 
--- Button test control function
+-- Button test control function (no log writing)
 local function control_button_test(mode, test_type)
     local test_mode_file = "/tmp/button_test_mode"
-    
     if mode == "on" then
-        -- Create test mode file
         local file = io.open(test_mode_file, "w")
         if file then
-            file:write(test_type or "normal")
+            file:write(test_type or "TEST_MODE_ON")
             file:close()
             return true
         end
     elseif mode == "off" then
-        -- Remove test mode file
         os.remove(test_mode_file)
         return true
     end
-    
     return false
 end
 
 -- Get query parameters
 local params = parse_query_string()
 local mode = params["mode"]
-local test_type = params["type"]
+local logs = params["logs"]
 
-if mode then
-    mode = urldecode(mode)
-    
-    -- Validate mode
-    if mode ~= "on" and mode ~= "off" then
-        print("Invalid mode. Use 'on' or 'off'")
-        return
-    end
-    
-    -- Validate test type if provided
-    if test_type then
-        test_type = urldecode(test_type)
-        if test_type ~= "normal" and test_type ~= "1sec" and test_type ~= "5sec" then
-            print("Invalid test type. Use 'normal', '1sec', or '5sec'")
-            return
+if mode == "on" and logs == "1" then
+    print("Content-type: text/plain; charset=UTF-8\n\n")
+    local file = io.open("/tmp/button_test.log", "r")
+    if file then
+        for line in file:lines() do
+            print(line)
         end
+        file:close()
     end
-    
-    -- Control button test mode
-    if control_button_test(mode, test_type) then
-        if mode == "on" then
-            print("Button test mode has been enabled.")
-            if test_type then
-                print("Test type: " .. test_type)
-            end
-            print("Press the reset button to test.")
-            print("Available events: pressed, timeout, released")
-            print("Test types:")
-            print("  normal: Default behavior")
-            print("  1sec: Simulate 1 second press")
-            print("  5sec: Simulate 5 second press")
-        else
-            print("Button test mode has been disabled.")
-        end
+    return
+elseif mode == "on" then
+    control_button_test("on")
+    print("Content-type: text/html; charset=UTF-8\n\n")
+    print([[
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Button Test Mode</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f0f0f0;
+        }
+        #main-frame {
+            max-width: 700px;
+            margin: 0 auto;
+        }
+        .desc {
+            background: #f9f9f9;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            padding: 15px;
+            margin-bottom: 10px;
+            font-size: 15px;
+            white-space: pre-line;
+        }
+        #log-frame {
+            margin-top: 20px;
+        }
+        #log-container {
+            width: 100%;
+            height: 400px;
+            font-size: 13px;
+            font-family: monospace;
+            background: #222;
+            color: #eee;
+            border: 1px solid #888;
+            border-radius: 5px;
+            padding: 10px;
+            resize: none;
+            box-sizing: border-box;
+        }
+    </style>
+</head>
+<body>
+<div id="main-frame">
+    <h1>Button Test Mode</h1>
+    <div class="desc">
+Button test mode has been enabled.
+Press the reset button to test.
+Available events: pressed, timeout, released
+Test types:
+  normal: Default behavior
+  1sec(RESET): Press and release in less than 1 second
+  5sec(FACTORY): Press and release after 5 or more seconds
+    </div>
+    <div id="log-frame">
+        <textarea id="log-container" readonly></textarea>
+    </div>
+</div>
+<script>
+    function updateLogs() {
+        fetch(window.location.pathname + '?mode=on&logs=1')
+            .then(response => response.text())
+            .then(text => {
+                document.getElementById('log-container').value = text.trim();
+                document.getElementById('log-container').scrollTop = document.getElementById('log-container').scrollHeight;
+            });
+    }
+    setInterval(updateLogs, 500);
+    updateLogs();
+</script>
+</body>
+</html>
+    ]])
+    return
+elseif mode == "off" then
+    if control_button_test("off") then
+        print("Content-type: text/plain; charset=UTF-8\n\nButton test mode has been disabled.")
     else
-        print("Failed to control button test mode.")
+        print("Content-type: text/plain; charset=UTF-8\n\nFailed to disable button test mode.")
     end
+    return
+elseif mode then
+    print("Content-type: text/plain; charset=UTF-8\n\n")
+    print("Invalid mode. Use 'on' or 'off'")
+    return
 else
-    print("Please provide test mode.")
-    print("Example: ?mode=on&type=1sec")
-    print("Modes: on, off")
-    print("Types: normal, 1sec, 5sec")
+    print("Content-type: text/plain; charset=UTF-8\n\n")
+    print("Please provide test mode.\nExample: ?mode=on\nModes: on, off")
+    return
 end 
