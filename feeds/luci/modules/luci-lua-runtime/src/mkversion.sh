@@ -20,7 +20,7 @@ else
 end
 
 distname    = "UI-2PV"
-distversion = "V0.9.1"
+distversion = "V0.9.2"
 
 luciname    = "${3:-LuCI}"
 luciversion = "${2:-Git}"
