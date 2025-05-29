@@ -28,6 +28,7 @@
 
 #include <linux/if_vlan.h>
 #include <linux/netdevice.h>
+#include <linux/workqueue.h>
 
 /* HW limitations for this switch:
  * - No large frame support (PKT_MAX_LEN at most 1536)
@@ -730,7 +731,6 @@ static void esw_hw_init(struct rt305x_esw *esw)
 }
 
 
-// 포트-인터페이스 매핑 구조
 struct {
     int port;
     int vlan_id;
@@ -741,45 +741,69 @@ struct {
     {4, 2, RT305X_ESW_REG_P4LED, "eth0.2"}, // WAN
 };
 
-int rt3050_esw_has_carrier(struct fe_priv *priv)
-{
+struct my_netdev_work {
+    struct work_struct work;
+    struct net_device *dev;
+	int link;
+};
 
-	return 0;
+static void change_netdev_flags(struct work_struct *work)
+{
+    struct my_netdev_work *my_work = container_of(work, struct my_netdev_work, work);
+    struct net_device *dev = my_work->dev;
+    
+	rtnl_lock();
+	if (my_work->link) {
+		dev_change_flags(dev, dev->flags | IFF_UP, NULL);
+	} else {
+		dev_change_flags(dev, dev->flags & ~IFF_UP, NULL);
+	}
+	rtnl_unlock();
+
+    kfree(my_work);
 }
 
 
-// 인터럽트 핸들러에서
 static irqreturn_t esw_interrupt(int irq, void *_esw)
 {
     struct rt305x_esw *esw = (struct rt305x_esw *) _esw;
     u32 status = esw_r32(esw, RT305X_ESW_REG_ISR);
     u32 reg_poa, port_link_status_map;
     int i;
+	struct my_netdev_work *my_work;
+
+    my_work = kmalloc(sizeof(struct my_netdev_work), GFP_ATOMIC);
+    if (!my_work) {
+		return IRQ_HANDLED;
+	}
+	INIT_WORK(&my_work->work, change_netdev_flags);
 
     if (status & RT305X_ESW_PORT_ST_CHG) {
         reg_poa = esw_r32(esw, RT305X_ESW_REG_POA);
         port_link_status_map = (reg_poa >> RT305X_ESW_LINK_S) & RT305X_ESW_POA_LINK_MASK;
 
-        //dev_info(esw->dev, "ESW: Port status change detected, link map: 0x%x\n", port_link_status_map);
-
-        // 각 포트별로만 LED/Carrier 제어
         for (i = 0; i < ARRAY_SIZE(port_map); i++) {
             bool link = !!(port_link_status_map & BIT(port_map[i].port));
-
-            // VLAN 인터페이스 carrier 제어
             struct net_device *dev = dev_get_by_name(&init_net, port_map[i].ifname);
+
             if (dev) {
                 if (link) {
                     if (!netif_carrier_ok(dev)) {
                         dev_info(esw->dev, "ESW: Setting carrier ON for %s\n", port_map[i].ifname);
                         netif_carrier_on(dev);
-						esw_w32(esw, RT305X_ESW_LED_LINKACT, port_map[i].led_reg);
+                        esw_w32(esw, RT305X_ESW_LED_LINKACT, port_map[i].led_reg);
+						my_work->link = 1;
+						my_work->dev = dev;
+    					schedule_work(&my_work->work);
                     }
                 } else {
                     if (netif_carrier_ok(dev)) {
                         dev_info(esw->dev, "ESW: Setting carrier OFF for %s\n", port_map[i].ifname);
                         netif_carrier_off(dev);
-						esw_w32(esw, RT305X_ESW_LED_OFF, port_map[i].led_reg);
+                        esw_w32(esw, RT305X_ESW_LED_OFF, port_map[i].led_reg);
+						my_work->link = 0;
+						my_work->dev = dev;
+    					schedule_work(&my_work->work);
                     }
                 }
                 dev_put(dev);

@@ -50,7 +50,7 @@ load_led() {
 
 	config_get sysfs $1 sysfs
 	config_get name $1 name "$sysfs"
-	config_get trigger $1 trigger "none"
+	config_get trigger $1 trigger "netdev"
 	config_get dev $1 dev
 	config_get ports $1 port
 	config_get mode $1 mode
@@ -124,6 +124,25 @@ load_led() {
 						echo 1 > /sys/class/leds/${sysfs}/$m
 				done
 				echo $interval > /sys/class/leds/${sysfs}/interval 2>/dev/null
+
+				# Check switch port status and interface state for default LED setting
+				if [ $dev == "eth0.1" ]; then
+					switch_port=0
+				elif [ $dev == "eth0.2" ]; then
+					switch_port=4
+				else
+					switch_port=0
+				fi
+
+				local raw_status=$(swconfig dev switch0 port $switch_port get link)
+				local port_status=$(echo "$raw_status" | grep -o "link:.*" | cut -d: -f2 | cut -d' ' -f1)
+
+				# Set LED brightness based on carrier status
+				if [ "$port_status" = "up" ]; then
+					ifconfig $dev up
+				else
+					ifconfig $dev down
+				fi
 			}
 			;;
 
