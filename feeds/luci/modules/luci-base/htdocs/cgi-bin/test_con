@@ -76,7 +76,7 @@ print([[<!DOCTYPE html>
         </div>
         <div class="led-block">
             <div class="led-circle led-]] .. led_state("0") .. [["></div>
-            Wall-pad Link
+            VPN Link
         </div>
         <div class="led-block">
             <div class="led-circle led-]] .. led_state("4") .. [["></div>
@@ -89,7 +89,7 @@ print([[<!DOCTYPE html>
     <table class="speed-table">
         <tr><th>Port</th><th>Speed</th><th>Duplex</th></tr>
         <tr><td>CPU Link</td><td>]] .. port_speed("6") .. [[</td><td>]] .. port_duplex("6") .. [[</td></tr>
-        <tr><td>Wall-pad Link</td><td>]] .. port_speed("0") .. [[</td><td>]] .. port_duplex("0") .. [[</td></tr>
+        <tr><td>VPN Link</td><td>]] .. port_speed("0") .. [[</td><td>]] .. port_duplex("0") .. [[</td></tr>
         <tr><td>LAN Link</td><td>]] .. port_speed("4") .. [[</td><td>]] .. port_duplex("4") .. [[</td></tr>
     </table>
 </body>
