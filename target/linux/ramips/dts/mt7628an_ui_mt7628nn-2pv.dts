@@ -39,13 +39,13 @@
 		LAN {
 			function = LED_FUNCTION_LAN_2;
 			color = <LED_COLOR_ID_GREEN>;
-			gpios = <&gpio 43 GPIO_ACTIVE_LOW>;
+			gpios = <&gpio 39 GPIO_ACTIVE_LOW>;
 		};
 
 		VPN {
 			function = LED_FUNCTION_VPN;
 			color = <LED_COLOR_ID_GREEN>;
-			gpios = <&gpio 39 GPIO_ACTIVE_LOW>;
+			gpios = <&gpio 43 GPIO_ACTIVE_LOW>;
 		};
 	};
 };
