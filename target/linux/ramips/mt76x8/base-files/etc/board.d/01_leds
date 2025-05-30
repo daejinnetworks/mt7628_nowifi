@@ -53,7 +53,7 @@ vpn,mt7628nn-p2)
 	ucidef_set_led_netdev "lan" "LAN" "green:lan" "eth0.1" "link tx rx"
 	;;
 ui,mt7628nn-2pv)
-	ucidef_set_led_netdev "VPN" "VPN" "green:wan" "eth0.1" "link tx rx"
+	ucidef_set_led_netdev "VPN" "VPN" "green:vpn" "eth0.1" "link tx rx"
 	ucidef_set_led_netdev "LAN" "LAN" "green:lan" "eth0.2" "link tx rx"
 	;;
 hilink,hlk-7688a)
