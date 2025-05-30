@@ -52,6 +52,8 @@ ucidef_set_interface() {
 		case "$network" in
 			lan) json_add_string protocol static ;;
 			wan) json_add_string protocol static ;;
+			VPN) json_add_string protocol static ;;
+			LAN) json_add_string protocol static ;;
 			*) json_add_string protocol none ;;
 		esac
 	fi

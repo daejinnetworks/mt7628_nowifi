@@ -36,13 +36,13 @@
 			gpios = <&gpio 37 GPIO_ACTIVE_LOW>;
 		};
 
-		wan {
+		LAN {
 			function = LED_FUNCTION_WAN;
 			color = <LED_COLOR_ID_GREEN>;
 			gpios = <&gpio 43 GPIO_ACTIVE_LOW>;
 		};
 
-		lan {
+		VPN {
 			function = LED_FUNCTION_LAN;
 			color = <LED_COLOR_ID_GREEN>;
 			gpios = <&gpio 39 GPIO_ACTIVE_LOW>;

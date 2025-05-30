@@ -253,8 +253,8 @@ ramips_setup_macs()
 		lan_mac=$(macaddr_add "$wan_mac" 1)
 				;;
 	ui,mt7628nn-2pv)
-		wan_mac=$(mtd_get_mac_binary factory 0x4)
-		lan_mac=$(macaddr_add "$wan_mac" 1)
+		LAN_mac=$(mtd_get_mac_binary factory 0x4)
+		VPN_mac=$(macaddr_add "$LAN_mac" 1)
 				;;
 	cudy,wr1000|\
 	hilink,hlk-7628n|\
@@ -356,6 +356,8 @@ ramips_setup_macs()
 	[ -n "$lan_mac" ] && ucidef_set_interface_macaddr "lan" $lan_mac
 	[ -n "$wan_mac" ] && ucidef_set_interface_macaddr "wan" $wan_mac
 	[ -n "$label_mac" ] && ucidef_set_label_macaddr $label_mac
+	[ -n "$VPN_mac" ] && ucidef_set_interface_macaddr "VPN" $VPN_mac
+	[ -n "$LAN_mac" ] && ucidef_set_interface_macaddr "LAN" $LAN_mac
 }
 
 board_config_update
