@@ -108,11 +108,15 @@ generate_network() {
 	[ "$1" = "lan" -a -z "$ports" ] && {
 		ports="$device"
 	}
+	[ "$1" = "VPN" -a -z "$ports" ] && {
+		ports="$device"
+	}
+	bridge_name_suffix="lan"
 
 	[ -n "$ports" -a -z "$bridge" ] && {
 		uci -q batch <<-EOF
 			add network device
-			set network.@device[-1].name='br-$1'
+			set network.@device[-1].name='br-$bridge_name_suffix'
 			set network.@device[-1].type='bridge'
 		EOF
 		for port in $ports; do uci add_list network.@device[-1].ports="$port"; done
@@ -125,7 +129,7 @@ generate_network() {
 				EOF
 			done
 		}
-		device=br-$1
+		device=br-$bridge_name_suffix
 		type=
 		macaddr=""
 	}
@@ -164,6 +168,8 @@ generate_network() {
 			case "$1" in
 				lan) ipad=${ipaddr:-"192.168.1.1"} ;;
 				wan) ipad=${ipaddr:-"192.168.123.1"} ;;
+				VPN) ipad=${ipaddr:-"192.168.1.1"} ;;
+				LAN) ipad=${ipaddr:-"192.168.123.1"} ;;
 				*) ipad=${ipaddr:-"192.168.$((addr_offset++)).1"} ;;
 			esac
 
@@ -179,7 +185,7 @@ generate_network() {
 
 		dhcp)
 			# fixup IPv6 slave interface if parent is a bridge
-			[ "$type" = "bridge" ] && device="br-$1"
+			[ "$type" = "bridge" ] && device="br-$bridge_name_suffix"
 
 			uci set network.$1.proto='dhcp'
 			[ -e /proc/sys/net/ipv6 ] && {
