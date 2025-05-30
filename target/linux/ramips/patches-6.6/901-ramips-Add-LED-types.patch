@@ -1,0 +1,12 @@
+diff -urN a/include/dt-bindings/leds/common.h b/include/dt-bindings/leds/common.h
+--- a/include/dt-bindings/leds/common.h	2025-05-29 16:37:02.320539304 -0700
++++ b/include/dt-bindings/leds/common.h	2025-05-30 01:06:57.930847182 -0700
+@@ -89,6 +89,8 @@
+ #define LED_FUNCTION_HEARTBEAT "heartbeat"
+ #define LED_FUNCTION_INDICATOR "indicator"
+ #define LED_FUNCTION_LAN "lan"
++#define LED_FUNCTION_VPN "VPN"
++#define LED_FUNCTION_LAN_2 "LAN"
+ #define LED_FUNCTION_MAIL "mail"
+ #define LED_FUNCTION_MOBILE "mobile"
+ #define LED_FUNCTION_MTD "mtd"
