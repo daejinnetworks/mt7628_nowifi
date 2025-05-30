@@ -123,6 +123,9 @@ GetMac()
 	elif [ "$1" == "wan" ]; then
 		#read wan mac
 		Get_offset_data 6 ${wan_mac_offset}
+	elif [ "$1" == "VPN" -o "$1" == "LAN" ]; then
+		#read wan mac
+		Get_offset_data 6 ${wan_mac_offset}
 	else
 		usage
 		exit 1
@@ -170,6 +173,9 @@ SetMac()
 	elif [ "$1" == "wan" ]; then
 		#write wan mac
 		Set_offset_data 6 ${wan_mac_offset} $@
+	elif [ "$1" == "VPN" -o "$1" == "LAN" ]; then
+		#write wan mac
+		Set_offset_data 6 ${wan_mac_offset} $@
 	else
 		usage
 		exit 1
@@ -212,7 +218,7 @@ SetModel()
 # 2. Set/Get the offset data: mtk_factory -r/-w length offset /data
 # 3. Overwrite from offset1 to offset2 by length byte : mtk_factory -o length from to
 if [ "$1" == "-r" ]; then
-	if [ "$2" == "lan" -o "$2" == "lan2" -o "$2" == "wan" ]; then
+	if [ "$2" == "lan" -o "$2" == "lan2" -o "$2" == "wan" -o "$2" == "VPN" -o "$2" == "LAN" ]; then
 		GetMac $2
 	elif [ "$2" == "serial_no" ]; then
 		GetSerial $2
@@ -226,7 +232,7 @@ if [ "$1" == "-r" ]; then
 		exit 1
 	fi
 elif [ "$1" == "-w" ]; then
-	if [ "$2" == "lan"  -o "$2" == "lan2" -o "$2" == "wan" ]; then
+	if [ "$2" == "lan" -o "$2" == "lan2" -o "$2" == "wan" -o "$2" == "VPN" -o "$2" == "LAN" ]; then
 		SetMac $2 $@
 	elif [ "$2" == "serial_no" ]; then
 		SetSerial $2 $@
