@@ -24,6 +24,7 @@ define Package/ewsvpnc
 	CATEGORY:=Network
 	SUBMENU:=VPN
 	MENU:=1
+	DEPENDS:=+libatomic
 	PROVIDES:=XNsystems
 endef
 
