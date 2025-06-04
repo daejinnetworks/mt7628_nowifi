@@ -16,31 +16,24 @@ PKG_SOURCE_URL:=
 PKG_SOURCE:=
 PKG_HASH:=cddddaa74eafeae5ed556d24cba598aa943626007ee46399fb1998abd0cd342e
 
-PKG_MAINTAINER:=
-
-PKG_INSTALL:=1
-PKG_FIXUP:=autoreconf
-PKG_BUILD_PARALLEL:=1
-PKG_BUILD_FLAGS:=gc-sections
-PKG_LICENSE:=GPL-2.0
-PKG_CPE_ID:=cpe:/a:openvpn:openvpn
-
 include $(INCLUDE_DIR)/package.mk
 
-define Package/ewsvpnc/Default
-  TITLE:=eWalker SSL VPN
-  SECTION:=net
-  CATEGORY:=Network
-  SUBMENU:=VPN
-  MENU:=1
-  DEPENDS:=+kmod-tun +libcap-ng
-  PROVIDES:=XNsystems
+define Package/ewsvpnc
+	TITLE:=eWalker SSL VPN Client
+	SECTION:=net
+	CATEGORY:=Network
+	SUBMENU:=VPN
+	MENU:=1
+	PROVIDES:=XNsystems
 endef
 
 define Build/Prepare
-  mkdir -p $(PKG_BUILD_DIR)
-  $(CP) ./ewsvpnc $(PKG_BUILD_DIR)/
-endif
+	mkdir -p $(PKG_BUILD_DIR)
+	$(CP) ./ewsvpnc $(PKG_BUILD_DIR)/
+endef
+
+define Build/Compile
+endef
 
 define Package/ewsvpnc/conffiles
 /etc/config/ewsvpnc
@@ -54,7 +47,7 @@ define Package/ewsvpnc/install
 		$(1)/etc/config
 
 	$(INSTALL_BIN) \
-		$(PKG_INSTALL_DIR)/ewsvpnc \
+		$(PKG_BUILD_DIR)/ewsvpnc \
 		$(1)/usr/sbin/
 
 	$(INSTALL_BIN) \
