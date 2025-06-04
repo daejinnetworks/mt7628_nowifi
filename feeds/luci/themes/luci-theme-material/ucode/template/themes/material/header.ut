@@ -60,6 +60,25 @@
 			<a id="logo" href="{{ ctx.authsession ? dispatcher.build_url('admin/status/overview') : '#' }}"><img src="{{ media }}/brand.png" alt="OpenWrt"></a>
 			<a class="brand" href="#">{{ hostname }}</a>
 			<span class="status" id="indicators"></span>
+
+			<!-- 사용자/로그아웃 드롭다운 메뉴 -->
+			<div class="header-menu-group">
+				<div class="dropdown user-dropdown">
+					<button class="dropdown-toggle">👤 {{ ctx.username ?? 'User' }}</button>
+					<ul class="dropdown-menu">
+						<li><a href="#" data-modal="admin-modal">관리자 설정</a></li>
+						<li><a href="#" data-modal="basic-modal">기본설정</a></li>
+						<li><a href="#" data-modal="smtp-modal">SMTP</a></li>
+					</ul>
+				</div>
+				<div class="dropdown logout-dropdown">
+					<button class="dropdown-toggle"><img src="/luci-static/material/icons/logout_custom.png" alt="logout" style="height:1.5em;vertical-align:middle;margin-right:0.5em;">로그아웃</button>
+					<ul class="dropdown-menu">
+						<li><a href="#" data-modal="reboot-modal">재시작</a></li>
+						<li><a href="#" data-modal="shutdown-modal">시스템 종료</a></li>
+					</ul>
+				</div>
+			</div>
 		</div>
 	</div>
 </header>
@@ -101,3 +120,45 @@
 				</noscript>
 
 				<div id="tabmenu" style="display:none"></div>
+
+				<!-- 모달 HTML 삽입 (숨김 상태) -->
+				<div id="admin-modal" class="custom-modal" style="display:none"></div>
+				<div id="basic-modal" class="custom-modal" style="display:none"></div>
+				<div id="smtp-modal" class="custom-modal" style="display:none"></div>
+				<div id="reboot-modal" class="custom-modal" style="display:none"></div>
+				<div id="shutdown-modal" class="custom-modal" style="display:none"></div>
+			</div>
+		</div>
+	</div>
+</div>
+
+<!-- 모달 스크립트 -->
+<script>
+function openModal(id, html) {
+  var modal = document.getElementById(id);
+  if (modal) {
+    modal.innerHTML = html + '<button class="modal-close" onclick="closeModal(\''+id+'\')">닫기</button>';
+    modal.style.display = 'block';
+    document.body.classList.add('modal-overlay-active');
+  }
+}
+function closeModal(id) {
+  var modal = document.getElementById(id);
+  if (modal) {
+    modal.style.display = 'none';
+    modal.innerHTML = '';
+    document.body.classList.remove('modal-overlay-active');
+  }
+}
+document.addEventListener('DOMContentLoaded', function() {
+  document.querySelectorAll('[data-modal]').forEach(function(el) {
+    el.addEventListener('click', function(e) {
+      e.preventDefault();
+      var id = el.getAttribute('data-modal');
+      if (window.renderModalContent && id) {
+        openModal(id, window.renderModalContent(id));
+      }
+    });
+  });
+});
+</script>
