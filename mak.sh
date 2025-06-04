@@ -87,7 +87,7 @@ IMG_POS=`pwd`
 IMG_NAME=${IMG_POS##*/}.bin
 DEST_DIR="/home/lssnow/images"
 if [ -d $DEST_DIR ]; then
-	echo "cp bin/targets/mediatek/mt7981-glibc/*sysupgrade.bin ~/images/${IMG_NAME}"
+	echo "cp bin/targets/ramips/mt76x8/*sysupgrade.bin ~/images/${IMG_NAME}"
 	cp bin/targets/ramips/mt76x8/*sysupgrade.bin ~/images/${IMG_NAME}
 fi
 
