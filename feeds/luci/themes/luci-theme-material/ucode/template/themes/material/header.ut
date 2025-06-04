@@ -58,7 +58,7 @@
 		<div class="container">
 			<span class="showSide"></span>
 			<a id="logo" href="{{ ctx.authsession ? dispatcher.build_url('admin/status/overview') : '#' }}"><img src="{{ media }}/brand.png" alt="OpenWrt"></a>
-			<a class="brand" href="#">{{ hostname }}</a>
+			<a class="brand" href="#" style="font-size:2.2rem; font-weight:bold;">{{ hostname }}</a>
 			<span class="status" id="indicators"></span>
 
 			<!-- 사용자/로그아웃 드롭다운 메뉴 -->

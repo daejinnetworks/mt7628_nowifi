@@ -164,6 +164,9 @@ html {
 body {
 	font-size: .8rem;
 	background-color: #eee;
+	background-image: url('./bg-tile.png');
+	background-repeat: repeat;
+	background-size: auto;
 }
 
 html,
@@ -378,7 +381,7 @@ small {
 
 header {
 	color: var(--header-color);
-	background: var(--header-bg);
+	background: #fff;
 }
 
 header > .fill > .container {
@@ -405,7 +408,7 @@ header > .fill > .container > .brand {
 	cursor: default;
 	vertical-align: text-bottom;
 	text-decoration: none;
-	color: var(--header-color);
+	color: var(--header-bg);
 }
 
 header > .fill > .container > .status {
@@ -1712,6 +1715,9 @@ body:not(.Interfaces) .cbi-rowstyle-2:first-child {
 	padding: 1em;
 	border-radius: 3px !important;
 	background: var(--white-color);
+	background-image: url('./bg-tile.png');
+	background-repeat: repeat;
+	background-size: auto;
 	box-shadow: 0 2px 2px 0 rgba(0, 0, 0, .16), 0 0 2px 0 rgba(0, 0, 0, .12);
 }
 
