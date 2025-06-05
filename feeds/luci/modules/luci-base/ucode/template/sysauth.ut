@@ -4,115 +4,71 @@
  Licensed to the public under the Apache License 2.0.
 -#}
 
-<style>
-.xn-login-container {
-    max-width: 600px;
-    margin: 260px auto 0 auto;
-    background: #f5f7fa;
-    border: 2px solid #2196f3;
-    border-radius: 6px;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-    padding: 32px 32px 24px 32px;
-    font-family: 'Segoe UI', Arial, sans-serif;
-    position: relative;
-    overflow: hidden;
-}
-.xn-login-container::before {
-    content: '';
-    position: absolute;
-    inset: 0;
-    background: url('/luci-static/material/bg-tile.png') repeat;
-    opacity: 0.55;
-    filter: brightness(0.95);
-    z-index: 0;
-}
-.xn-login-container > * {
-    position: relative;
-    z-index: 1;
-}
-.xn-logo {
-    display: flex;
-    align-items: center;
-    margin-bottom: 24px;
-}
-.xn-logo-img {
-    width: 180px;
-    height: 60px;
-    object-fit: contain;
-}
-.xn-login-form {
-    display: flex;
-    flex-direction: row;
-    gap: 16px;
-    margin-bottom: 8px;
-    align-items: stretch;
-}
-.xn-login-input, .xn-login-btn {
-    flex: 1;
-    padding: 10px 12px;
-    border-radius: 8px;
-    font-size: 28px;
-    height: 56px;
-    box-sizing: border-box;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-.xn-login-input {
-    border: 1px solid #aaa;
-    background: #d3d3d3;
-    color: #222;
-    outline: none;
-}
-.xn-login-label {
-    font-size: 18px;
-    color: #444;
-    margin-bottom: 2px;
-    margin-left: 2px;
-    font-weight: bold;
-    letter-spacing: 0.05em;
-}
-.xn-login-btn {
-    background: #4fc3f7;
-    color: #fff;
-    border: none;
-    font-weight: bold;
-    cursor: pointer;
-    transition: background 0.2s;
-    margin-left: 16px;
-    min-width: 120px;
-}
-.xn-login-btn:hover {
-    background: #0288d1;
-}
-.xn-login-alert {
-    color: #d32f2f;
-    font-size: 15px;
-    margin-top: 4px;
-    margin-bottom: 0;
-    font-weight: bold;
-    margin-left: 2px;
-}
-</style>
+{% include('header') %}
 
-<div class="xn-login-container">
-    <div class="xn-logo">
-        <img class="xn-logo-img" src="/luci-static/material/brand.png" alt="XNsystems" />
-    </div>
-    <form method="post" autocomplete="off">
-        <div class="xn-login-form">
-            <div style="flex:1;display:flex;flex-direction:column;">
-                <label class="xn-login-label" for="luci_username">UBER.ID</label>
-                <input class="xn-login-input" type="text" id="luci_username" name="luci_username" value="{{ entityencode(duser, true) }}" autofocus />
-                {% if (fuser): %}
-                <div class="xn-login-alert">허가받은 사용자만 접근할 수 있습니다.</div>
-                {% endif %}
-            </div>
-            <div style="flex:1;display:flex;flex-direction:column;">
-                <label class="xn-login-label" for="luci_password">UBER.PASSWORD</label>
-                <input class="xn-login-input" type="password" id="luci_password" name="luci_password" />
-            </div>
-            <button class="xn-login-btn" type="submit">LOGIN</button>
-        </div>
-    </form>
-</div>
+<form method="post">
+	{% if (fuser): %}
+		<div class="alert-message warning">
+			<p>{{ _('Invalid username and/or password! Please try again.') }}</p>
+		</div>
+	{% endif %}
+
+	<div class="cbi-map">
+		<h2 name="content">{{ _('Authorization Required') }}</h2>
+		<div class="cbi-map-descr">
+			{{ _('Please enter your username and password.') }}
+		</div>
+		<div class="cbi-section"><div class="cbi-section-node">
+			<div class="cbi-value">
+				<label class="cbi-value-title">{{ _('Username') }}</label>
+				<div class="cbi-value-field">
+					<input class="cbi-input-text" type="text" name="luci_username" value="{{ entityencode(duser, true) }}" />
+				</div>
+			</div>
+			<div class="cbi-value cbi-value-last">
+				<label class="cbi-value-title">{{ _('Password') }}</label>
+				<div class="cbi-value-field">
+					<input class="cbi-input-text" type="password" name="luci_password" />
+				</div>
+			</div>
+		</div></div>
+	</div>
+
+	<div class="cbi-page-actions">
+		<input type="submit" value="{{ _('Log in') }}" class="btn cbi-button cbi-button-apply" />
+		<input type="reset" value="{{ _('Reset') }}" class="btn cbi-button cbi-button-reset" />
+	</div>
+</form>
+
+{%
+	let https_ports = uci.get('uhttpd', 'main', 'listen_https') ?? [];
+
+	https_ports = uniq(filter(
+		map(
+			(type(https_ports) == 'string') ? split(https_port, /\s+/) : https_ports,
+			e => +match(e, /\d+$/)?.[0]
+		),
+		p => (p >= 0 && p <= 65535)
+	));
+%}
+
+<script>
+	var input = document.getElementsByName('luci_password')[0];
+
+	if (input)
+		input.focus();
+
+	if (document.location.protocol != 'https:') {
+		{{ https_ports }}.forEach(function(port) {
+			var url = 'https://' + window.location.hostname + ':' + port + window.location.pathname;
+			var img = new Image();
+
+			img.onload = function() { window.location = url };
+			img.src = 'https://' + window.location.hostname + ':' + port + '{{ resource }}/icons/loading.gif?' + Math.random();
+
+			setTimeout(function() { img.src = '' }, 5000);
+		});
+	}
+</script>
+
+{% include('footer') %}
