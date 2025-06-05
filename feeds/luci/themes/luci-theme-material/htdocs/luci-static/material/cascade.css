@@ -164,9 +164,6 @@ html {
 body {
 	font-size: .8rem;
 	background-color: #eee;
-	background-image: url('./bg-tile.png');
-	background-repeat: repeat;
-	background-size: auto;
 }
 
 html,
@@ -381,7 +378,7 @@ small {
 
 header {
 	color: var(--header-color);
-	background: #fff;
+	background: var(--header-bg);
 }
 
 header > .fill > .container {
@@ -408,7 +405,7 @@ header > .fill > .container > .brand {
 	cursor: default;
 	vertical-align: text-bottom;
 	text-decoration: none;
-	color: var(--header-bg);
+	color: var(--header-color);
 }
 
 header > .fill > .container > .status {
