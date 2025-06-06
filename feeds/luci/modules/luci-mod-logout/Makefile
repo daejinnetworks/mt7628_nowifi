@@ -6,9 +6,10 @@
 
 include $(TOPDIR)/rules.mk
 
-LUCI_TITLE:=LuCI Administration - full-featured for full control
-LUCI_DEPENDS:=+luci-base +luci-mod-status +luci-mod-system +luci-mod-network +luci-mod-logout
+LUCI_TITLE:=LuCI Logout Pages
+LUCI_DEPENDS:=+luci-base
 
+PKG_BUILD_DEPENDS:=
 PKG_LICENSE:=Apache-2.0
 
 include ../../luci.mk

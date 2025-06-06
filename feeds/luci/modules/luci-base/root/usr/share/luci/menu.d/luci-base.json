@@ -81,14 +81,10 @@
 		"title": "Log out",
 		"order": 999,
 		"action": {
-			"type": "function",
-			"module": "luci.controller.admin.index",
-			"function": "action_logout"
-		},
-		"depends": {
-			"acl": [ "luci-base" ]
-		},
-		"firstchild_ineligible": true
+			"type": "firstchild",
+			"preferred": "logout",
+			"recurse": true
+		}
 	},
 
 	"admin/uci": {

@@ -1,0 +1,38 @@
+{
+	"admin/logout/logout": {
+		"title": "logout",
+		"order": 10,
+		"action": {
+			"type": "function",
+			"module": "luci.controller.admin.index",
+			"function": "action_logout"
+		},
+		"depends": {
+			"acl": [ "luci-base", "luci-mod-logout-index" ]
+		}
+	},
+
+	"admin/logout/reboot": {
+		"title": "reboot",
+		"order": 20,
+		"action": {
+			"type": "view",
+			"path": "logout/reboot"
+		},
+		"depends": {
+			"acl": [ "luci-base", "luci-mod-logout-index" ]
+		}
+	},
+
+	"admin/logout/poweroff": {
+		"title": "poweroff",
+		"order": 30,
+		"action": {
+			"type": "view",
+			"path": "logout/poweroff"
+		},
+		"depends": {
+			"acl": [ "luci-base", "luci-mod-logout-index" ]
+		}
+	}
+}

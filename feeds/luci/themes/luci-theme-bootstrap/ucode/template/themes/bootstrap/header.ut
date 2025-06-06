@@ -47,7 +47,12 @@
 	<body class="lang_{{ dispatcher.lang }} {{ entityencode(striptags(node?.title ?? ''), true) }}" data-page="{{ entityencode(join('-', ctx.request_path), true) }}">
 		{% if (!blank_page): %}
 		<header>
-			<a class="brand" href="/">{{ striptags(boardinfo.hostname ?? '?') }}</a>
+			<div id="brand" aria-label="Brand logo">
+				<img src="/luci-static/bootstrap/brand.png" alt="Brand">
+			</div>
+		
+				<a id="host-display" href="/" style="color: #00bfff;">{{ striptags(boardinfo.hostname ?? '?') }}</a>
+		
 			<ul class="nav" id="topmenu" style="display:none"></ul>
 			<div id="indicators" class="pull-right"></div>
 		</header>
