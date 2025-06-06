@@ -2810,3 +2810,38 @@ header, #brand, #brand img {
   visibility: visible;
   transition-delay: 0.1s;
 }
+
+.nav li.dropdown:after {
+	content: '';
+	position: absolute;
+	top: 100%;
+	left: 0;
+	right: 0;
+	height: 10px;
+	background: transparent;
+  }
+
+.nav .dropdown-menu::before {
+  content: "";
+  position: absolute;
+  top: -10px;
+  left: 24px;
+  width: 0;
+  height: 0;
+  border-left: 10px solid transparent;
+  border-right: 10px solid transparent;
+  border-bottom: 10px solid #f5f5f5; /* 배경색 */
+  z-index: 1001;
+}
+.nav .dropdown-menu::after {
+  content: "";
+  position: absolute;
+  top: -11px;
+  left: 23px;
+  width: 0;
+  height: 0;
+  border-left: 11px solid transparent;
+  border-right: 11px solid transparent;
+  border-bottom: 11px solid #3a3a3a; /* 테두리 */
+  z-index: 1000;
+}
