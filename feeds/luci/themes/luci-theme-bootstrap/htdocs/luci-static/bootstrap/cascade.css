@@ -2611,20 +2611,41 @@ div.cbi-value var.cbi-tooltip-container,
 
 
 .color-spinning {
-	width: 48px;
-	height: 48px;
-	border: 6px solid transparent;
-	border-top: 6px solid #7c5fff;   /* 보라색 */
-	border-right: 6px solid #00cfff; /* 파란색 */
-	border-bottom: 6px solid #00ffb8;/* 초록색 */
-	border-left: 6px solid #7c5fff;  /* 보라색 */
-	border-radius: 50%;
-	animation: color-spin 1s linear infinite;
+    width: 64px;
+    height: 64px;
+    border: 8px solid transparent;
+    border-top: 8px solid #7c5fff;
+    border-right: 8px solid #00cfff;
+    border-bottom: 8px solid #00ffb8;
+    border-left: 8px solid #390ef6;
+    border-radius: 50%;
+    position: relative;
+    animation: color-spin 1s linear infinite;
+    box-sizing: border-box;
 }
-
+.color-spinning::before,
+.color-spinning::after {
+    content: none;
+}
+.color-spinning::before {
+    content: '';
+    position: absolute;
+    width: 0;
+    height: 0;
+    top: -34px;
+    right: -34px;
+    transform: rotate(45deg);
+    border-left: 28px solid transparent;
+    border-right: 28px solid transparent;
+    border-bottom: 56px solid #7c5fff;
+    z-index: 2;
+}
+.color-spinning::after {
+    content: none;
+}
 @keyframes color-spin {
-	0%   { transform: rotate(0deg);}
-	100% { transform: rotate(360deg);}
+    0% { transform: rotate(0deg);}
+    100% { transform: rotate(360deg);}
 }
 
 #topmenu, #indicators {
@@ -2747,7 +2768,7 @@ header, #brand, #brand img {
   min-width: 0;              /* 최소 너비 제한 없음 */
   max-width: none;           /* 최대 너비 제한 없음 */
   text-align: center;
-  border: 1.5px solid #3a3a3a;
+  /* border: 1.5px solid #3a3a3a; */
   font-weight: bold;
 }
 

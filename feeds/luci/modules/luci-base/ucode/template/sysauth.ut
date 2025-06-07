@@ -7,12 +7,6 @@
 {% include('header') %}
 
 <form method="post">
-	{% if (fuser): %}
-		<div class="alert-message warning">
-			<p>{{ _('Invalid username and/or password! Please try again.') }}</p>
-		</div>
-	{% endif %}
-
 	<div class="cbi-map">
 		<h2 name="content">{{ _('Authorization Required') }}</h2>
 		<div class="cbi-map-descr">

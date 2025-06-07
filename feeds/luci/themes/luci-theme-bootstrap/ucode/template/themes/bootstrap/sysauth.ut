@@ -3,41 +3,156 @@
  Licensed to the public under the Apache License 2.0.
 -#}
 
-{% include('header', { blank_page: true }) %}
+<style>
+.xn-login-container {
+    max-width: 800px;
+    min-height: 1.3em;
+    margin: 200px auto 0 auto;
+    background: linear-gradient(135deg, #f5f7fa 60%, #e3eaf1 100%);
+    border: 2px solid #2196f3;
+    border-radius: 0;
+    box-shadow: 0 8px 32px rgba(33,150,243,0.13), 0 2px 8px rgba(0,0,0,0.10);
+    padding: 3px 32px 3px 32px;
+    font-family: 'Segoe UI', Arial, sans-serif;
+    position: relative;
+    overflow: hidden;
+}
+.xn-login-container::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: url('/luci-static/bootstrap/bg-tile.png') repeat;
+    opacity: 0.60;
+    filter: brightness(0.95);
+    z-index: 0;
+}
+.xn-login-container > * {
+    position: relative;
+    z-index: 1;
+}
+.xn-logo {
+    display: flex;
+    align-items: top;
+	margin-top: 2px;
+    margin-bottom: 36px;
+}
+.xn-logo-img {
+    width: 220px;
+    height: 78px;
+    object-fit: contain;
+}
+.xn-login-form {
+    display: flex;
+    flex-direction: row;
+	margin-top: 0px;
+    margin-bottom: 4px;
+	margin-block-end: 4px;
+    align-items: flex-start;
+}
+.xn-login-input {
+    border: 1px solid #aaa;
+    background: #d3d3d3;
+    color: #222;
+    outline: none;
+    font-size: 15px;
+    width: 100%;
+    max-width: 280px;
+    min-width: 140px;
+    box-sizing: border-box;
+    height: 37px;
+    padding: 3px 10px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.xn-login-label {
+    font-size: 6px;
+    color: #888;
+    margin-bottom: 2px;
+    margin-left: 2px;
+    /*font-weight: bold;*/
+    letter-spacing: 0.05em;
+}
+.xn-login-btn {
+    background: linear-gradient(180deg, #4fc3f7 0%, #039be5 100%);
+    color: #fff;
+    border: none;
+    font-weight: bold;
+    cursor: pointer;
+    transition: background 0.2s, box-shadow 0.2s, transform 0.1s;
+    margin-left: 8px;
+    min-width: 120px;
+    width: 140px;
+    height: 40px;
+    padding: 0;
+    border-radius: 12px;
+    box-shadow: 0 4px 16px rgba(33, 150, 243, 0.15), 0 1.5px 4px rgba(0,0,0,0.10);
+    font-size: 17px;
+    letter-spacing: 0.04em;
+    outline: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    align-self: center;
+}
+.xn-login-btn:hover, .xn-login-btn:focus {
+    background: linear-gradient(180deg, #0288d1 0%, #4fc3f7 100%);
+    box-shadow: 0 6px 24px rgba(33, 150, 243, 0.22), 0 2px 8px rgba(0,0,0,0.13);
+    transform: translateY(-2px) scale(1.03);
+}
+.xn-login-btn:active {
+    background: linear-gradient(180deg, #0277bd 0%, #039be5 100%);
+    box-shadow: 0 2px 6px rgba(33, 150, 243, 0.10), 0 1px 2px rgba(0,0,0,0.08);
+    transform: translateY(2px) scale(0.97);
+}
+.xn-login-alert {
+    color: #d32f2f;
+    font-size: 10px;
+    margin-top: 12px;
+    margin-bottom: 0;
+    font-weight: bold;
+    margin-left: 0px;
+    min-height: 10px;
+}
+.xn-login-container, .xn-login-container * {
+    font-size: unset !important;
+}
+</style>
 
-<section hidden>
-	<form method="post" class="cbi-map">
-		<div class="cbi-section">
-			<div class="cbi-section-node">
-				<div class="cbi-value">
-					<label class="cbi-value-title" for="luci_username">{{ _('Username') }}</label>
-					<div class="cbi-value-field">
-						<input name="luci_username" id="luci_username" type="text" autocomplete="username" value="{{ entityencode(duser, true) }}">
-					</div>
-				</div>
-				<div class="cbi-value">
-					<label class="cbi-value-title" for="luci_password">{{ _('Password') }}</label>
-					<div class="cbi-value-field">
-						<input name="luci_password" id="luci_password" type="password" autocomplete="current-password">
-					</div>
-				</div>
-			</div>
-		</div>
-	</form>
+<div class="xn-login-container">
+    <div class="xn-logo">
+        <img class="xn-logo-img" src="/luci-static/bootstrap/brand.png" alt="XNsystems" />
+    </div>
+    <section>
+        <form method="post" autocomplete="off" id="xn-login-form">
+            <div class="xn-login-form">
+                <div style="flex:1;display:flex;flex-direction:column;">
+                    <label class="xn-login-label" for="luci_username">USER.ID</label>
+                    <input class="xn-login-input" type="text" id="luci_username" name="luci_username" value="" autofocus />
+                </div>
+                <div style="flex:1;display:flex;flex-direction:column;">
+                    <label class="xn-login-label" for="luci_password">USER.PASSWORD</label>
+                    <input class="xn-login-input" type="password" id="luci_password" name="luci_password" />
+                </div>
+                <div style="display:flex;flex-direction:column;align-items:center;min-width:140px;">
+                    <label class="xn-login-label">&nbsp;</label>
+                    <button class="xn-login-btn" type="submit">LOGIN</button>
+                </div>
+            </div>
+            <div class="xn-login-alert">
+			    {% if (fuser): %}
+					<div class="alert-message error">허가받은 사용자만 접근할 수 있습니다.</div>
+				{% endif %}
+        </form>
+        <div id="login-spinner" style="display:none;justify-content:center;align-items:center;height:120px;">
+            <div class="color-spinning"></div>
+        </div>
+    </section>
+</div>
 
-	<hr>
-
-	{% if (fuser): %}
-	<div class="alert-message error">
-		{{ _('Invalid username and/or password! Please try again.') }}
-	</div>
-	{% endif %}
-
-	<button class="btn cbi-button-positive important">{{ _('Log in') }}</button>
-</section>
 
 <div id="view">
-	<div class="spinning">{{ _('Loading view…') }}</div>
 	<script>
 		L.require('ui').then(function(ui) {
 			ui.instantiateView('bootstrap.sysauth');
