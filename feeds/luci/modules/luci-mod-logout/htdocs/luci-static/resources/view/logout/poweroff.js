@@ -1,12 +1,13 @@
 'use strict';
-'use view';
-
+'require baseclass';
+'require fs';
 'require rpc';
+'require uci';
+
 
 var callPoweroffSystem = rpc.declare({
     object: 'luci',
-    method: 'poweroffSystem',
-    expect: { result: true }
+    method: 'poweroffSystem'
 });
 
 return L.view.extend({
@@ -22,9 +23,13 @@ return L.view.extend({
                 E('button', {
                     'class': 'cbi-button cbi-button-action',
                     'click': function() {
-                        L.ui.showModal(_('      Shutting down...'));
                         callPoweroffSystem().then(function() {
-                            L.ui.showModal(_('Shutting down...'));
+                            L.ui.showModal(
+                                E('div', { style: 'display: flex; align-items: center; gap: 10px;' }, [
+                                    E('div', { class: 'color-spinning' }),
+                                    E('span', {}, _('       Shutting down...'))
+                                ])
+                            );
                         });
                     }
                 }, _('Shut Down'))

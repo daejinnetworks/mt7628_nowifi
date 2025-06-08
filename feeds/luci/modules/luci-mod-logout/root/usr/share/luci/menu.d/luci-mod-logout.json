@@ -8,7 +8,7 @@
 			"function": "action_logout"
 		},
 		"depends": {
-			"acl": [ "luci-base", "luci-mod-logout-index" ]
+			"acl": [ "luci-mod-logout-index" ]
 		}
 	},
 
@@ -20,7 +20,7 @@
 			"path": "logout/reboot"
 		},
 		"depends": {
-			"acl": [ "luci-base", "luci-mod-logout-index", "luci.rebootSystem" ]
+			"acl": [ "luci-mod-logout-index" ]
 		}
 	},
 
@@ -32,7 +32,7 @@
 			"path": "logout/poweroff"
 		},
 		"depends": {
-			"acl": [ "luci-base", "luci-mod-logout-index", "luci.poweroffSystem" ]
+			"acl": [ "luci-mod-logout-index" ]
 		}
 	}
 }

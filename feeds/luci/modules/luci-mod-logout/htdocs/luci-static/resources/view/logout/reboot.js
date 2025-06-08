@@ -1,7 +1,9 @@
 'use strict';
-'use view';
-
+'require baseclass';
+'require fs';
 'require rpc';
+'require uci';
+
 
 var callRebootSystem = rpc.declare({
     object: 'luci',
@@ -22,14 +24,13 @@ return L.view.extend({
                 E('button', {
                     'class': 'cbi-button cbi-button-action',
                     'click': function() {
-                        L.ui.showModal(
-                            E('div', { style: 'display: flex; align-items: center; gap: 10px;' }, [
-                                E('div', { class: 'color-spinning' }),
-                                E('span', {}, _('         Rebooting...'))
-                            ])
-                        );
                         callRebootSystem().then(function() {
-                            L.ui.showModal(_('Rebooting...'));
+                            L.ui.showModal(
+                                E('div', { style: 'display: flex; align-items: center; gap: 10px;' }, [
+                                    E('div', { class: 'color-spinning' }),
+                                    E('span', {}, _('       Rebooting...'))
+                                ])
+                            );
                         });
                     }
                 }, _('Reboot'))

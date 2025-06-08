@@ -3,12 +3,24 @@
 		"description": "Grant access to main status display",
 		"read": {
 			"file": {
-				"/etc/config/luci_logout": [ "read" ]
+				"/etc/config/luci_logout": [ "read" ],
+				"/sbin/reboot": [ "exec" ],
+				"/sbin/poweroff": [ "exec" ]
+			},
+			"ubus": {
+				"file": [ "exec", "write" ],
+				"luci": [ "rebootSystem", "poweroffSystem" ]
 			}
 		},
 		"write": {
 			"file": {
-				"/etc/config/luci_logout": [ "write" ]
+				"/etc/config/luci_logout": [ "write" ],
+				"/sbin/reboot": [ "exec" ],
+				"/sbin/poweroff": [ "exec" ]
+			},
+			"ubus": {
+				"file": [ "exec", "write" ],
+				"luci": [ "rebootSystem", "poweroffSystem" ]
 			}
 		}
 	}
