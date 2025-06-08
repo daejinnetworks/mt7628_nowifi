@@ -55,20 +55,64 @@ return baseclass.extend({
 	},
 
 	renderMainMenu: function(tree, url, level) {
+		console.log('[renderMainMenu] >>> ENTRY', { level, url, tree });
 		var ul = level ? E('ul', { 'class': 'dropdown-menu' }) : document.querySelector('#topmenu'),
 		    children = ui.menu.getChildren(tree);
+
+		console.log('[renderMainMenu] level:', level, '| children:', children.map(c => c.name));
+
+		if (!level) console.log('Top menu children:', children.map(c => c.name));
 
 		if (children.length == 0 || level > 1)
 			return E([]);
 
-		for (var i = 0; i < children.length; i++) {
-			var submenu = this.renderMainMenu(children[i], url + '/' + children[i].name, (level || 0) + 1),
-			    subclass = (!level && submenu.firstElementChild) ? 'dropdown' : null,
-			    linkclass = (!level && submenu.firstElementChild) ? 'menu' : null,
-			    linkurl = submenu.firstElementChild ? '#' : L.url(url, children[i].name);
+		// For top-level menu, move 'logout' to the end
+		var topLevel = !level;
+		var childrenCopy = children.slice();
+		console.log('[renderMainMenu] childrenCopy (init):', childrenCopy.map(c => c.name));
+		if (topLevel) {
+			var logoutIdx = childrenCopy.findIndex(function(item) { return item.name === 'logout' || item.name === 'admin/logout'; });
+			console.log('[renderMainMenu] logoutIdx:', logoutIdx);
+			if (logoutIdx !== -1) {
+				var logoutItem = childrenCopy.splice(logoutIdx, 1)[0];
+				console.log('[renderMainMenu] logoutItem:', logoutItem);
+				childrenCopy.push(logoutItem);
+				console.log('[renderMainMenu] childrenCopy after moving logout:', childrenCopy.map(c => c.name));
+			}
+		}
 
-			var linkChildren = [];
-			if (children[i].name === 'logout' && !level) {
+		if (topLevel) {
+			// 1. Render all non-logout items
+			var nonLogoutItems = childrenCopy.filter(function(item) { return item.name !== 'logout'; });
+			for (var i = 0; i < nonLogoutItems.length; i++) {
+				var submenu = this.renderMainMenu(nonLogoutItems[i], url + '/' + nonLogoutItems[i].name, (level || 0) + 1),
+					subclass = (!level && submenu.firstElementChild) ? 'dropdown' : null,
+					linkclass = (!level && submenu.firstElementChild) ? 'menu' : null,
+					linkurl = submenu.firstElementChild ? '#' : L.url(url, nonLogoutItems[i].name);
+
+				var linkChildren = [];
+				linkChildren.push(_(nonLogoutItems[i].title));
+
+				var li = E('li', { 'class': subclass }, [
+					E('a', { 'class': linkclass, 'href': linkurl }, linkChildren),
+					submenu
+				]);
+				ul.appendChild(li);
+			}
+			// 2. Add blank items to make total 6 (logout will be 7th)
+			var menuCount = nonLogoutItems.length;
+			for (var j = menuCount; j < 6; j++) {
+				ul.appendChild(E('li', { style: 'width: 100px; min-width: 100px; max-width: 100px;' }, ['\u00A0']));
+			}
+			// 3. Render logout as the last (7th) item
+			var logoutItem = childrenCopy.find(function(item) { return item.name === 'logout'; });
+			if (logoutItem) {
+				var submenu = this.renderMainMenu(logoutItem, url + '/' + logoutItem.name, (level || 0) + 1),
+					subclass = (!level && submenu.firstElementChild) ? 'dropdown' : null,
+					linkclass = (!level && submenu.firstElementChild) ? 'menu' : null,
+					linkurl = submenu.firstElementChild ? '#' : L.url(url, logoutItem.name);
+
+				var linkChildren = [];
 				linkChildren.push(
 					E('img', {
 						src: '/luci-static/bootstrap/logout_custom.png',
@@ -76,19 +120,35 @@ return baseclass.extend({
 						style: 'height:18px;width:auto;margin-right:6px;vertical-align:middle;'
 					})
 				);
+				linkChildren.push(_(logoutItem.title));
+
+				var li = E('li', { 'class': subclass }, [
+					E('a', { 'class': linkclass, 'href': linkurl }, linkChildren),
+					submenu
+				]);
+				ul.appendChild(li);
 			}
-			linkChildren.push(_(children[i].title));
+		} else {
+			// Not top level: render as before
+			for (var i = 0; i < childrenCopy.length; i++) {
+				var submenu = this.renderMainMenu(childrenCopy[i], url + '/' + childrenCopy[i].name, (level || 0) + 1),
+					subclass = (!level && submenu.firstElementChild) ? 'dropdown' : null,
+					linkclass = (!level && submenu.firstElementChild) ? 'menu' : null,
+					linkurl = submenu.firstElementChild ? '#' : L.url(url, childrenCopy[i].name);
 
-			var li = E('li', { 'class': subclass }, [
-				E('a', { 'class': linkclass, 'href': linkurl }, linkChildren),
-				submenu
-			]);
+				var linkChildren = [];
+				linkChildren.push(_(childrenCopy[i].title));
 
-			ul.appendChild(li);
+				var li = E('li', { 'class': subclass }, [
+					E('a', { 'class': linkclass, 'href': linkurl }, linkChildren),
+					submenu
+				]);
+				ul.appendChild(li);
+			}
 		}
 
 		ul.style.display = '';
-
+		console.log('[renderMainMenu] <<< EXIT', { level, url, ul });
 		return ul;
 	},
 

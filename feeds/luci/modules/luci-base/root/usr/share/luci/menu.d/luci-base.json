@@ -77,6 +77,16 @@
 		"auth": {}
 	},
 
+	"admin/users": {
+		"title": "Users Management",
+		"order": 888,
+		"action": {
+			"type": "firstchild",
+			"preferred": "logout",
+			"recurse": true
+		}
+	},
+
 	"admin/logout": {
 		"title": "Log out",
 		"order": 999,
