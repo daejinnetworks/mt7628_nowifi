@@ -67,8 +67,20 @@ return baseclass.extend({
 			    linkclass = (!level && submenu.firstElementChild) ? 'menu' : null,
 			    linkurl = submenu.firstElementChild ? '#' : L.url(url, children[i].name);
 
+			var linkChildren = [];
+			if (children[i].name === 'logout' && !level) {
+				linkChildren.push(
+					E('img', {
+						src: '/luci-static/bootstrap/logout_custom.png',
+						alt: 'logout',
+						style: 'height:18px;width:auto;margin-right:6px;vertical-align:middle;'
+					})
+				);
+			}
+			linkChildren.push(_(children[i].title));
+
 			var li = E('li', { 'class': subclass }, [
-				E('a', { 'class': linkclass, 'href': linkurl }, [ _(children[i].title) ]),
+				E('a', { 'class': linkclass, 'href': linkurl }, linkChildren),
 				submenu
 			]);
 

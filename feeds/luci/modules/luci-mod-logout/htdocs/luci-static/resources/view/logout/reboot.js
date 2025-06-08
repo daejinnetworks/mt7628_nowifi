@@ -1,6 +1,14 @@
 'use strict';
 'use view';
 
+'require rpc';
+
+var callRebootSystem = rpc.declare({
+    object: 'luci',
+    method: 'rebootSystem',
+    expect: { result: true }
+});
+
 return L.view.extend({
     render: function() {
         var hostname = (window.L && L.env && L.env.systemboard && L.env.systemboard.hostname) ? L.env.systemboard.hostname : '';
@@ -17,13 +25,12 @@ return L.view.extend({
                         L.ui.showModal(
                             E('div', { style: 'display: flex; align-items: center; gap: 10px;' }, [
                                 E('div', { class: 'color-spinning' }),
-                                E('span', {}, _('Rebooting...'))
+                                E('span', {}, _('         Rebooting...'))
                             ])
                         );
-                        L.resolveDefault(L.request.post(L.url('admin/system/reboot')), null)
-                            .then(function() {
-                                L.ui.showModal(_('Rebooting...'));
-                            });
+                        callRebootSystem().then(function() {
+                            L.ui.showModal(_('Rebooting...'));
+                        });
                     }
                 }, _('Reboot'))
             ]

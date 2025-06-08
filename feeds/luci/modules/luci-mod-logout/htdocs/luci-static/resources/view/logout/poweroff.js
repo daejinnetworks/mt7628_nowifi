@@ -1,6 +1,14 @@
 'use strict';
 'use view';
 
+'require rpc';
+
+var callPoweroffSystem = rpc.declare({
+    object: 'luci',
+    method: 'poweroffSystem',
+    expect: { result: true }
+});
+
 return L.view.extend({
     render: function() {
         var hostname = (window.L && L.env && L.env.systemboard && L.env.systemboard.hostname) ? L.env.systemboard.hostname : '';
@@ -14,11 +22,10 @@ return L.view.extend({
                 E('button', {
                     'class': 'cbi-button cbi-button-action',
                     'click': function() {
-                        L.ui.showModal(_('Shutting down...'));
-                        L.resolveDefault(L.request.post(L.url('admin/system/poweroff')), null)
-                            .then(function() {
-                                L.ui.showModal(_('Shutting down...'));
-                            });
+                        L.ui.showModal(_('      Shutting down...'));
+                        callPoweroffSystem().then(function() {
+                            L.ui.showModal(_('Shutting down...'));
+                        });
                     }
                 }, _('Shut Down'))
             ]

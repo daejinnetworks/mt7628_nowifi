@@ -407,6 +407,24 @@ const methods = {
 		}
 	},
 
+	// Add RPC function for system reboot
+	rebootSystem: {
+		call: function(request) {
+			return {
+				result: system('/sbin/reboot >/dev/null 2>&1') == 0
+			};
+		}
+	},
+
+	// Add RPC function for system poweroff
+	poweroffSystem: {
+		call: function(request) {
+			return {
+				result: system('/sbin/poweroff >/dev/null 2>&1') == 0
+			};
+		}
+	},
+
 	getBlockDevices: {
 		call: function() {
 			const block = popen('/sbin/block info 2>/dev/null');
