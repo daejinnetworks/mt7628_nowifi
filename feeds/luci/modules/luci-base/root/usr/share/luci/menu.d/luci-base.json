@@ -13,8 +13,6 @@
 	},
 
 	"admin/status": {
-		"title": "Status",
-		"order": 10,
 		"action": {
 			"type": "firstchild",
 			"preferred": "overview",
@@ -24,7 +22,7 @@
 
 	"admin/system": {
 		"title": "System",
-		"order": 20,
+		"order": 100,
 		"action": {
 			"type": "firstchild",
 			"preferred": "system",
@@ -33,8 +31,6 @@
 	},
 
 	"admin/services": {
-		"title": "Services",
-		"order": 40,
 		"action": {
 			"type": "firstchild",
 			"recurse": true
@@ -43,7 +39,7 @@
 
 	"admin/network": {
 		"title": "Network",
-		"order": 50,
+		"order": 200,
 		"action": {
 			"type": "firstchild",
 			"recurse": true
@@ -52,7 +48,7 @@
 
 	"admin/vpn": {
 		"title": "VPN",
-		"order": 70,
+		"order": 300,
 		"action": {
 			"type": "firstchild",
 			"recurse": true
@@ -77,12 +73,32 @@
 		"auth": {}
 	},
 
-	"admin/users": {
-		"title": "Users Management",
-		"order": 888,
+	"admin/firewall": {
+		"title": "Firewall",
+		"order": 400,
 		"action": {
 			"type": "firstchild",
-			"preferred": "logout",
+			"preferred": "forward_control",
+			"recurse": true
+		}
+	},
+
+	"admin/advanced": {
+		"title": "Advanced",
+		"order": 500,
+		"action": {
+			"type": "firstchild",
+			"preferred": "group_config",
+			"recurse": true
+		}
+	},
+
+	"admin/administrator": {
+		"title": "Administrator",
+		"order": 600,
+		"action": {
+			"type": "firstchild",
+			"preferred": "admin_config",
 			"recurse": true
 		}
 	},

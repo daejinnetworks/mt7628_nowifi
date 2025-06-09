@@ -71,27 +71,44 @@ return baseclass.extend({
 		var childrenCopy = children.slice();
 		console.log('[renderMainMenu] childrenCopy (init):', childrenCopy.map(c => c.name));
 		if (topLevel) {
-			var logoutIdx = childrenCopy.findIndex(function(item) { return item.name === 'logout' || item.name === 'admin/logout'; });
-			console.log('[renderMainMenu] logoutIdx:', logoutIdx);
-			if (logoutIdx !== -1) {
-				var logoutItem = childrenCopy.splice(logoutIdx, 1)[0];
-				console.log('[renderMainMenu] logoutItem:', logoutItem);
-				childrenCopy.push(logoutItem);
-				console.log('[renderMainMenu] childrenCopy after moving logout:', childrenCopy.map(c => c.name));
-			}
+			var logoutIdx = childrenCopy.findIndex(function(item) { return item.name === 'logout'; });
+			var logoutItem = logoutIdx !== -1 ? childrenCopy.splice(logoutIdx, 1)[0] : null;
+			var adminIdx = childrenCopy.findIndex(function(item) { return item.name === 'admin' || item.name === 'administrator'; });
+			var adminItem = adminIdx !== -1 ? childrenCopy.splice(adminIdx, 1)[0] : null;
 		}
 
 		if (topLevel) {
-			// 1. Render all non-logout items
-			var nonLogoutItems = childrenCopy.filter(function(item) { return item.name !== 'logout'; });
-			for (var i = 0; i < nonLogoutItems.length; i++) {
-				var submenu = this.renderMainMenu(nonLogoutItems[i], url + '/' + nonLogoutItems[i].name, (level || 0) + 1),
+			console.log('[renderMainMenu] Top-level menu items:', childrenCopy.map(c => c.name));
+			// 1. Render all other menu items
+			for (var i = 0; i < childrenCopy.length; i++) {
+				var submenu = this.renderMainMenu(childrenCopy[i], url + '/' + childrenCopy[i].name, (level || 0) + 1),
 					subclass = (!level && submenu.firstElementChild) ? 'dropdown' : null,
 					linkclass = (!level && submenu.firstElementChild) ? 'menu' : null,
-					linkurl = submenu.firstElementChild ? '#' : L.url(url, nonLogoutItems[i].name);
+					linkurl = submenu.firstElementChild ? '#' : L.url(url, childrenCopy[i].name);
 
 				var linkChildren = [];
-				linkChildren.push(_(nonLogoutItems[i].title));
+				if (childrenCopy[i].name === 'network') {
+					linkChildren.push('🌐 ');
+				}
+				if (childrenCopy[i].name === 'system') {
+					linkChildren.push('🖥️ ');
+				}
+				if (childrenCopy[i].name === 'vpn') {
+					linkChildren.push(
+						E('img', {
+							src: '/luci-static/bootstrap/vpn_custom.png',
+							alt: 'vpn',
+							style: 'height:18px;width:auto;margin-right:6px;vertical-align:middle;'
+						})
+					);
+				}
+				if (childrenCopy[i].name === 'firewall') {
+					linkChildren.push('🛡️ ');
+				}
+				if (childrenCopy[i].name === 'advanced') {
+					linkChildren.push('⚙️ ');
+				}
+				linkChildren.push(_(childrenCopy[i].title));
 
 				var li = E('li', { 'class': subclass }, [
 					E('a', { 'class': linkclass, 'href': linkurl }, linkChildren),
@@ -99,13 +116,32 @@ return baseclass.extend({
 				]);
 				ul.appendChild(li);
 			}
-			// 2. Add blank items to make total 6 (logout will be 7th)
-			var menuCount = nonLogoutItems.length;
-			for (var j = menuCount; j < 6; j++) {
+
+			// 2. Add blank items to make total 5 (admin and logout will be 6th and 7th)
+			var menuCount = childrenCopy.length;
+			for (var j = menuCount; j < 5; j++) {
 				ul.appendChild(E('li', { style: 'width: 100px; min-width: 100px; max-width: 100px;' }, ['\u00A0']));
 			}
-			// 3. Render logout as the last (7th) item
-			var logoutItem = childrenCopy.find(function(item) { return item.name === 'logout'; });
+
+			// 3. Render 'administrator' as 6th
+			if (adminItem) {
+				var submenu = this.renderMainMenu(adminItem, url + '/' + adminItem.name, (level || 0) + 1),
+					subclass = (!level && submenu.firstElementChild) ? 'dropdown' : null,
+					linkclass = (!level && submenu.firstElementChild) ? 'menu' : null,
+					linkurl = submenu.firstElementChild ? '#' : L.url(url, adminItem.name);
+
+				var linkChildren = [];
+				linkChildren.push('👤 ');
+				linkChildren.push(_(adminItem.title));
+
+				var li = E('li', { 'class': subclass }, [
+					E('a', { 'class': linkclass, 'href': linkurl }, linkChildren),
+					submenu
+				]);
+				ul.appendChild(li);
+			}
+
+			// 4. Render 'logout' as 7th
 			if (logoutItem) {
 				var submenu = this.renderMainMenu(logoutItem, url + '/' + logoutItem.name, (level || 0) + 1),
 					subclass = (!level && submenu.firstElementChild) ? 'dropdown' : null,

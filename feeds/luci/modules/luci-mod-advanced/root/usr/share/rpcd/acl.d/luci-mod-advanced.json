@@ -1,6 +1,6 @@
 {
-	"luci-mod-logout-index": {
-		"description": "Grant access to user-suspended display",
+	"luci-mod-advanced-index": {
+		"description": "Grant access to advanced settings",
 		"read": {
 			"file": {
 				"/etc/config/luci_logout": [ "read" ],

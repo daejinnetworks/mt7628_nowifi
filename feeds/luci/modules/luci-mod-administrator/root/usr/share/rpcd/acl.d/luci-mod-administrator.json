@@ -1,0 +1,28 @@
+{
+	"luci-mod-administrator-config": {
+		"description": "Grant access to administrator configuration",
+		"read": {
+			"file": {
+				"/etc/dropbear/authorized_keys": [ "read" ]
+			},
+			"ubus": {
+				"file": [ "read" ],
+				"luci": [ "getLEDs", "getTimezones", "getUSBDevices" ],
+				"rc": [ "list" ],
+				"system": [ "info" ]
+			},
+			"uci": [ "luci", "system", "dropbear", "uhttpd" ]
+		},
+		"write": {
+			"file": {
+				"/etc/dropbear/authorized_keys": [ "write" ]
+			},
+			"ubus": {
+				"file": [ "write" ],
+				"luci": [ "setLocaltime", "setPassword" ],
+				"rc": [ "init" ]
+			},
+			"uci": [ "luci", "system", "dropbear", "uhttpd" ]
+		}
+	}
+}

@@ -1,5 +1,5 @@
 {
-	"admin/system/acl": {
+	"admin/administrator/acl": {
 		"title": "ACL Settings",
 		"order": 10,
 		"action": {

@@ -5860,6 +5860,10 @@ msgid "Log level"
 msgstr ""
 
 #: modules/luci-base/root/usr/share/luci/menu.d/luci-base.json:81
+msgid "Administrator"
+msgstr "관리자"
+
+#: modules/luci-base/root/usr/share/luci/menu.d/luci-base.json:91
 msgid "Log out"
 msgstr "로그아웃"
 

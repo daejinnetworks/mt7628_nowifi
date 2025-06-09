@@ -1,0 +1,13 @@
+{
+	"admin/advanced/group_config": {
+		"title": "Group Config",
+		"order": 100,
+		"action": {
+			"type": "view",
+			"path": "advanced/group"
+		},
+		"depends": {
+			"acl": [ "luci-mod-advanced-index" ]
+		}
+	}
+}
