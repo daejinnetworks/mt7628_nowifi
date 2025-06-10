@@ -1,6 +1,6 @@
 {
 	"admin/system/system": {
-		"title": "System",
+		"title": "System Basic Info",
 		"order": 1,
 		"action": {
 			"type": "view",
