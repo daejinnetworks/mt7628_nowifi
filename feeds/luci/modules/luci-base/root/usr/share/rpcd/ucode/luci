@@ -407,24 +407,6 @@ const methods = {
 		}
 	},
 
-	// Add RPC function for system reboot
-	rebootSystem: {
-		call: function(request) {
-			return {
-				result: system('/sbin/reboot >/dev/null 2>&1') == 0
-			};
-		}
-	},
-
-	// Add RPC function for system poweroff
-	poweroffSystem: {
-		call: function(request) {
-			return {
-				result: system('/sbin/poweroff >/dev/null 2>&1') == 0
-			};
-		}
-	},
-
 	getBlockDevices: {
 		call: function() {
 			const block = popen('/sbin/block info 2>/dev/null');
@@ -602,6 +584,43 @@ const methods = {
 			}
 
 			return { result: ports };
+		}
+	},
+
+	// Add RPC function for system reboot
+	rebootSystem: {
+		call: function(request) {
+			return {
+				result: system('/sbin/reboot >/dev/null 2>&1') == 0
+			};
+		}
+	},
+
+	// Add RPC function for system poweroff
+	poweroffSystem: {
+		call: function(request) {
+			return {
+				result: system('/sbin/poweroff >/dev/null 2>&1') == 0
+			};
+		}
+	},
+	
+	getUserID: {
+		args: { sessionid: 'string' },
+		call: function(request) {
+			let username = null;
+			let session = null;
+			if (request.args.sessionid) {
+				session = ubus.call('session', 'get', { ubus_rpc_session: request.args.sessionid });
+				if (session && session.values && session.values.username) {
+					username = session.values.username;
+				}
+			}
+			if (username) {
+				return { username: username };
+			} else {
+				return { error: 'No user found in session' };
+			}
 		}
 	}
 };

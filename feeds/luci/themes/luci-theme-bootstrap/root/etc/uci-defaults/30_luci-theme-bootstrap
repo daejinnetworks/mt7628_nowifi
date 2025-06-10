@@ -18,9 +18,6 @@ if [ "$PKG_UPGRADE" != 1 ] && [ $changed = 1 ]; then
 	set_opt main.mediaurlbase /luci-static/bootstrap
 fi
 
-set_opt themes.BootstrapDark /luci-static/bootstrap-dark
-set_opt themes.BootstrapLight /luci-static/bootstrap-light
-
 if [ $changed = 1 ]; then
 	uci commit luci
 fi

@@ -5863,6 +5863,14 @@ msgstr ""
 msgid "Administrator"
 msgstr "관리자"
 
+#: modules/luci-base/root/usr/share/luci/menu.d/luci-base.json:87
+msgid "Advanced"
+msgstr "고급기능"
+
+#: modules/luci-mod-advanced/root/usr/share/luci/menu.d/luci-mod-advanced.json
+msgid "Group Config"
+msgstr "그룹설정"
+
 #: modules/luci-base/root/usr/share/luci/menu.d/luci-base.json:91
 msgid "Log out"
 msgstr "로그아웃"

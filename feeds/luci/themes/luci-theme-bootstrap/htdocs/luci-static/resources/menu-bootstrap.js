@@ -55,11 +55,8 @@ return baseclass.extend({
 	},
 
 	renderMainMenu: function(tree, url, level) {
-		console.log('[renderMainMenu] >>> ENTRY', { level, url, tree });
 		var ul = level ? E('ul', { 'class': 'dropdown-menu' }) : document.querySelector('#topmenu'),
 		    children = ui.menu.getChildren(tree);
-
-		console.log('[renderMainMenu] level:', level, '| children:', children.map(c => c.name));
 
 		if (!level) console.log('Top menu children:', children.map(c => c.name));
 
@@ -69,7 +66,6 @@ return baseclass.extend({
 		// For top-level menu, move 'logout' to the end
 		var topLevel = !level;
 		var childrenCopy = children.slice();
-		console.log('[renderMainMenu] childrenCopy (init):', childrenCopy.map(c => c.name));
 		if (topLevel) {
 			var logoutIdx = childrenCopy.findIndex(function(item) { return item.name === 'logout'; });
 			var logoutItem = logoutIdx !== -1 ? childrenCopy.splice(logoutIdx, 1)[0] : null;
@@ -78,7 +74,6 @@ return baseclass.extend({
 		}
 
 		if (topLevel) {
-			console.log('[renderMainMenu] Top-level menu items:', childrenCopy.map(c => c.name));
 			// 1. Render all other menu items
 			for (var i = 0; i < childrenCopy.length; i++) {
 				var submenu = this.renderMainMenu(childrenCopy[i], url + '/' + childrenCopy[i].name, (level || 0) + 1),
@@ -184,7 +179,6 @@ return baseclass.extend({
 		}
 
 		ul.style.display = '';
-		console.log('[renderMainMenu] <<< EXIT', { level, url, ul });
 		return ul;
 	},
 

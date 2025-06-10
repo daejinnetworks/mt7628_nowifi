@@ -14,7 +14,7 @@ msgstr ""
 
 #: applications/luci-app-acl/root/usr/share/luci/menu.d/luci-app-acl.json:3
 msgid "ACL Settings"
-msgstr "ACL 설정"
+msgstr "관리자 설정"
 
 #: applications/luci-app-acl/htdocs/luci-static/resources/view/system/acl.js:78
 msgid "ACL group"
@@ -125,12 +125,12 @@ msgstr "만료되지 않음"
 #: applications/luci-app-acl/htdocs/luci-static/resources/view/system/acl.js:304
 msgctxt "All permissions granted"
 msgid "full"
-msgstr "꽉찬"
+msgstr "모든 권한"
 
 #: applications/luci-app-acl/htdocs/luci-static/resources/view/system/acl.js:306
 msgctxt "Select individual permissions manually"
 msgid "individual"
-msgstr "각"
+msgstr "개별 권한"
 
 #: applications/luci-app-acl/htdocs/luci-static/resources/view/system/acl.js:65
 msgctxt "Some permissions granted"
