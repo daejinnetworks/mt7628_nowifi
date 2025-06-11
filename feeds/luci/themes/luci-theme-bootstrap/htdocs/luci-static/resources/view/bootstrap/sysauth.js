@@ -20,12 +20,18 @@ return view.extend({
 
 		btn.addEventListener('click', function() {
 			dlg.querySelectorAll('*').forEach(function(node) { node.style.display = 'none' });
-			dlg.appendChild(E('div', { 'class': 'color-spinning' }, _('Logging in…')));
+
+			var wrapper = E('div', { style: 'display: flex; align-items: center; justify-content: center; gap: 16px; height: 80px;' });
+			var spinner = E('div', { 'class': 'color-spinning' });
+			var text = E('span', {}, _('Logging in…'));
+			wrapper.appendChild(spinner);
+			wrapper.appendChild(text);
+			dlg.appendChild(wrapper);
 
 			form.submit()
 		});
 
-		document.querySelector('input[type="password"]').focus();
+		document.querySelector('#luci_username').focus();
 
 		return '';
 	},
