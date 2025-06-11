@@ -8,7 +8,7 @@ return view.extend({
 		    btn = document.querySelector('button');
 
 		var dlg = ui.showModal(
-			_('Authorization Required'),
+			null,
 			[].slice.call(document.querySelectorAll('section > *')),
 			'login'
 		);
@@ -20,7 +20,7 @@ return view.extend({
 
 		btn.addEventListener('click', function() {
 			dlg.querySelectorAll('*').forEach(function(node) { node.style.display = 'none' });
-			dlg.appendChild(E('div', { 'class': 'spinning' }, _('Logging in…')));
+			dlg.appendChild(E('div', { 'class': 'color-spinning' }, _('Logging in…')));
 
 			form.submit()
 		});
