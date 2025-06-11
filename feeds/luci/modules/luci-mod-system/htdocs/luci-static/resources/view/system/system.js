@@ -388,32 +388,60 @@ return view.extend({
 		};
 
 		s.taboption('hostname_dns', form.DummyValue, '_custom_hostname_dns', '', '').renderWidget = function() {
-			return E('div', { 'style': 'padding: 16px 0 0 0; max-width: 400px; font-size:12px;' }, [
-				row(
-					'게이트웨이 이름',
-					[
-						E('input', { 'type': 'text', 'value': 'XECUREGATEWAY', 'style': 'width:180px; margin-right:8px;' }),
-						E('button', { 'class': 'cbi-button', 'style': 'width:90px;' }, '이름 적용')
-					]
-				),
-				row(
-					'도메인 네임 서버(DNS)',
-					E('div', {}, [
-						E('input', { 'type': 'text', 'value': '164.124.101.2', 'style': 'width:220px; margin-bottom:6px; display:block;' }),
-						E('input', { 'type': 'text', 'value': '168.126.63.1', 'style': 'width:220px; margin-bottom:6px; display:block;' }),
-						E('input', { 'type': 'text', 'value': '', 'style': 'width:220px; margin-bottom:6px; display:block;' })
-					]),
-					'width:130px; text-align:right; font-weight:bold; margin-right:12px; margin-top:0;',
-					'display:flex; flex-direction:column;'
-				),
-				E('div', { 'style': 'display:flex; justify-content:center; margin-top:12px;' }, [
-					E('button', { 'class': 'cbi-button', 'style': 'width:220px;' }, '네임서버 적용')
+			// 버튼 스타일 공통 정의 (높이 더 얇게)
+			var buttonStyle = [
+				'width:100px;',
+				'background: linear-gradient(180deg, #f8fafc 0%, #e2e8f0 100%);',
+				'border: 1px solid #b6c2d2;',
+				'border-radius: 6px;',
+				'box-shadow: 0 2px 6px rgba(0,0,0,0.08);',
+				'color: #222;',
+				'font-weight: bold;',
+				'transition: box-shadow 0.2s, background 0.2s;',
+				'cursor: pointer;',
+				'padding: 2px 0;',
+				'font-size: 13px;',
+				'line-height: 1.2;',
+			].join(' ');
+			var buttonHoverStyle = "this.style.background='#e0e7ef';this.style.boxShadow='0 4px 12px rgba(0,0,0,0.13)';";
+			var buttonOutStyle = "this.style.background='linear-gradient(180deg, #f8fafc 0%, #e2e8f0 100%)';this.style.boxShadow='0 2px 6px rgba(0,0,0,0.08)';";
+
+			return E('div', { 'style': 'padding: 16px 0 0 0; max-width: 500px; font-size:12px;' }, [
+				// 게이트웨이 이름 한 줄
+				E('div', { 'style': 'display:flex; align-items:center; margin-bottom:18px;' }, [
+					E('div', { 'style': 'width:140px; font-weight:bold; margin-right:24px; text-align:right;' }, '게이트웨이 이름'),
+					E('input', { 'type': 'text', 'value': 'XECUREGATEWAY', 'style': 'width:200px; margin-right:24px;' }),
+					E('button', {
+						'class': 'cbi-button',
+						'style': buttonStyle,
+						'onmouseover': buttonHoverStyle,
+						'onmouseout': buttonOutStyle
+					}, '이름 적용')
+				]),
+				// 도메인 네임 서버(DNS) 라벨 + 첫 입력폼
+				E('div', { 'style': 'display:flex; align-items:center; margin-bottom:4px;' }, [
+					E('div', { 'style': 'width:140px; font-weight:bold; margin-right:24px; text-align:right;' }, '도메인 네임 서버(DNS)'),
+					E('input', { 'type': 'text', 'value': '164.124.101.2', 'style': 'width:200px;' })
+				]),
+				// 두 번째 입력폼 (라벨 없이)
+				E('div', { 'style': 'display:flex; align-items:center; margin-bottom:4px; margin-left:164px;' }, [
+					E('input', { 'type': 'text', 'value': '168.126.63.1', 'style': 'width:200px;' })
+				]),
+				// 세 번째 입력폼 (라벨 없이)
+				E('div', { 'style': 'display:flex; align-items:center; margin-bottom:12px; margin-left:164px;' }, [
+					E('input', { 'type': 'text', 'value': '', 'style': 'width:200px;' })
+				]),
+				// 네임서버 적용 버튼: 입력폼 시작 위치에 맞추고, 절반 크기
+				E('div', { 'style': 'display:flex; margin-left:164px; margin-bottom:16px;' }, [
+					E('button', {
+						'class': 'cbi-button',
+						'style': buttonStyle,
+						'onmouseover': buttonHoverStyle,
+						'onmouseout': buttonOutStyle
+					}, '네임서버 적용')
 				])
 			]);
 		}
-
-		var o_hostname = s.taboption('hostname_dns', form.Value, 'hostname', _('호스트 이름'));
-		o_hostname.datatype = 'hostname';
 
 		/*
 		 * Logging
