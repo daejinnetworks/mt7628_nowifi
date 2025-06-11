@@ -1018,7 +1018,7 @@ header {
 	top: 0;
 	z-index: 800;
 	overflow: visible;
-	color: #BFBFBF;
+	color: #c4c3c3;
 	margin: -5px -5px 15px -5px;
 	display: flex;
     height: 43px;
@@ -2622,30 +2622,24 @@ div.cbi-value var.cbi-tooltip-container,
     position: relative;
     animation: color-spin 1s linear infinite;
     box-sizing: border-box;
+    display: inline-block;
 }
-.color-spinning::before,
-.color-spinning::after {
-    content: none;
-}
+
 .color-spinning::before {
     content: '';
     position: absolute;
-    width: 0;
-    height: 0;
-    top: -34px;
-    right: -34px;
-    transform: rotate(45deg);
-    border-left: 28px solid transparent;
-    border-right: 28px solid transparent;
-    border-bottom: 56px solid #7c5fff;
-    z-index: 2;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    z-index: -1;
 }
-.color-spinning::after {
-    content: none;
-}
+
 @keyframes color-spin {
-    0% { transform: rotate(0deg);}
-    100% { transform: rotate(360deg);}
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
 }
 
 #topmenu, #indicators {

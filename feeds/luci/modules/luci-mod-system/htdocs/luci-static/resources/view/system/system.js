@@ -13,6 +13,40 @@ var callRcList, callRcInit, callTimezone,
 // 새로운 시간 row를 위한 div 생성 (updateUI보다 위에 선언)
 var newTimeRow = E('div', {});
 
+// 폼 표준 row 함수: 파일 최상단에 선언
+function row(label, input) {
+	var field = E('div', { class: 'cbi-value-field' });
+	if (Array.isArray(input)) {
+		input.forEach(function(i) { field.appendChild(i); });
+	} else {
+		field.appendChild(input);
+	}
+	return E('div', { class: 'cbi-value' }, [
+		E('label', { class: 'cbi-value-title' }, label),
+		field
+	]);
+}
+
+// 공통 날짜/시간 2줄 row 생성 함수
+function makeDateTimeRows(label, dateStr, timeStr) {
+	return [
+		E('div', { class: 'cbi-value', style: 'margin-bottom:8px;' }, [
+			E('label', { class: 'cbi-value-title' }, label),
+			E('div', { class: 'cbi-value-field', style: 'display: flex; gap: 1em; align-items: center;' }, [
+				E('div', {}, dateStr),
+				E('div', {}, timeStr)
+			])
+		])
+	];
+}
+
+function makeTimeRows(label, dateStr, timeStr) {
+	return [
+		row(label, E('div', {}, dateStr)),
+		row('', E('div', {}, timeStr))
+	];
+}
+
 callRcList = rpc.declare({
 	object: 'rc',
 	method: 'list',
@@ -51,19 +85,6 @@ callTimezone = rpc.declare({
 	expect: { '': {} }
 });
 
-function formatTime(epoch) {
-	var date = new Date(epoch * 1000);
-
-	return '%04d-%02d-%02d %02d:%02d:%02d'.format(
-		date.getUTCFullYear(),
-		date.getUTCMonth() + 1,
-		date.getUTCDate(),
-		date.getUTCHours(),
-		date.getUTCMinutes(),
-		date.getUTCSeconds()
-	);
-}
-
 CBILocalTime = form.DummyValue.extend({
 	renderWidget: function(section_id, option_id, cfgvalue) {
 		var self = this;
@@ -86,13 +107,10 @@ CBILocalTime = form.DummyValue.extend({
 		function updateUI() {
 			var mode = modeSelect.value;
 			var current = getCurrentDateTime();
-			// 새로운 시간 row 동적 갱신
 			newTimeRow.innerHTML = '';
 			if (mode === 'ntp') {
-				dateText.textContent = current.date;
-				timeText.textContent = current.time;
-				newTimeRow.appendChild(row('Current Time', dateText));
-				newTimeRow.appendChild(row(' ', timeText));
+				var rows = makeTimeRows('Current Time', current.date, current.time);
+				rows.forEach(function(r) { newTimeRow.appendChild(r); });
 			} else {
 				newTimeRow.appendChild(row('New Time', dateInput));
 				newTimeRow.appendChild(row(' ', timeInput));
@@ -192,16 +210,14 @@ CBILocalTime = form.DummyValue.extend({
 		}
 		autoCheckbox.addEventListener('change', updateLocalAddrUI);
 
-		function row(label, input) {
-			return E('div', {
-				'style': 'display:flex; align-items:center; margin-bottom:8px;'
-			}, [
-				E('div', { 'style': 'width:110px; text-align:right; font-weight:bold; margin-right:50px;' }, label),
-				input
+		function makeTimeRow(label, dateStr, timeStr) {
+			return row(label, [
+				E('div', {}, dateStr),
+				E('div', {}, timeStr)
 			]);
 		}
 
-		container = E('div', { 'style': 'font-size:12px; max-width:350px; padding:16px 0 0 0;' }, [
+		container = E('div', { 'style': 'font-size:12px; width:100%; padding:16px 0 0 0;' }, [
 			row('시간설정', modeSelect),
 			newTimeRow,
 			row('적용주기', periodSelect),
@@ -297,13 +313,10 @@ return view.extend({
 			function updateUI() {
 				var mode = modeSelect.value;
 				var current = getCurrentDateTime();
-				// 새로운 시간 row 동적 갱신
 				newTimeRow.innerHTML = '';
 				if (mode === 'ntp') {
-					dateText.textContent = current.date;
-					timeText.textContent = current.time;
-					newTimeRow.appendChild(row('Current Time', dateText));
-					newTimeRow.appendChild(row(' ', timeText));
+					var rows = makeTimeRows('Current Time', current.date, current.time);
+					rows.forEach(function(r) { newTimeRow.appendChild(r); });
 				} else {
 					newTimeRow.appendChild(row('New Time', dateInput));
 					newTimeRow.appendChild(row(' ', timeInput));
@@ -362,16 +375,7 @@ return view.extend({
 			}
 			autoCheckbox.addEventListener('change', updateLocalAddrUI);
 
-			function row(label, input) {
-				return E('div', {
-					'style': 'display:flex; align-items:center; margin-bottom:8px;'
-				}, [
-					E('div', { 'style': 'width:110px; text-align:right; font-weight:bold; margin-right:50px;' }, label),
-					input
-				]);
-			}
-
-			container = E('div', { 'style': 'font-size:12px; max-width:350px; padding:16px 0 0 0;' }, [
+			container = E('div', { 'style': 'font-size:12px; width:100%; padding:16px 0 0 0;' }, [
 				row('시간설정', modeSelect),
 				newTimeRow,
 				row('적용주기', periodSelect),
@@ -384,14 +388,6 @@ return view.extend({
 		};
 
 		s.taboption('hostname_dns', form.DummyValue, '_custom_hostname_dns', '', '').renderWidget = function() {
-			function row(label, input, labelStyle, inputStyle) {
-				return E('div', {
-					'style': 'display:flex; align-items:center; margin-bottom:12px;'
-				}, [
-					E('div', { 'style': (labelStyle || 'width:130px; text-align:right; font-weight:bold; margin-right:12px;') }, label),
-					E('div', { 'style': (inputStyle || '') }, input)
-				]);
-			}
 			return E('div', { 'style': 'padding: 16px 0 0 0; max-width: 400px; font-size:12px;' }, [
 				row(
 					'게이트웨이 이름',
@@ -478,9 +474,23 @@ return view.extend({
 			mapEl.insertBefore(tabStyle, mapEl.firstChild);
 			poll.add(function() {
 				return callGetLocaltime().then(function(t) {
-					var localtimeEl = mapEl.querySelector('#localtime');
-					if (localtimeEl) {
-						localtimeEl.textContent = formatTime(t);
+					var fields = newTimeRow.querySelectorAll('.cbi-value-field');
+					if (fields.length === 2) {
+						var date = new Date(t * 1000);
+						var dateStr = '%04d-%02d-%02d'.format(
+							date.getUTCFullYear(),
+							date.getUTCMonth() + 1,
+							date.getUTCDate()
+						);
+						var timeStr = '%02d:%02d:%02d'.format(
+							date.getUTCHours(),
+							date.getUTCMinutes(),
+							date.getUTCSeconds()
+						);
+						fields[0].innerHTML = '';
+						fields[0].appendChild(E('div', {}, dateStr));
+						fields[1].innerHTML = '';
+						fields[1].appendChild(E('div', {}, timeStr));
 					}
 				});
 			});
