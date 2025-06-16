@@ -1,7 +1,7 @@
 {
 	"admin/system/system": {
 		"title": "System Basic Info",
-		"order": 1,
+		"order": 10,
 		"action": {
 			"type": "view",
 			"path": "system/system"
@@ -11,122 +11,9 @@
 		}
 	},
 
-	"admin/system/admin": {
-		"title": "Administration",
-		"order": 2,
-		"action": {
-			"type": "firstchild"
-		},
-		"depends": {
-			"acl": [ "luci-mod-system-config", "luci-mod-system-ssh" ]
-		}
-	},
-
-	"admin/system/admin/password": {
-		"title": "Router Password",
-		"order": 1,
-		"action": {
-			"type": "view",
-			"path": "system/password"
-		},
-		"depends": {
-			"acl": [ "luci-mod-system-config" ]
-		}
-	},
-
-	"admin/system/admin/dropbear": {
-		"title": "SSH Access",
-		"order": 2,
-		"action": {
-			"type": "view",
-			"path": "system/dropbear"
-		},
-		"depends": {
-			"acl": [ "luci-mod-system-ssh" ],
-			"fs": {	"/usr/sbin/dropbear": "executable" }
-		}
-	},
-
-	"admin/system/admin/sshkeys": {
-		"title": "SSH-Keys",
-		"order": 3,
-		"action": {
-			"type": "view",
-			"path": "system/sshkeys"
-		},
-		"depends": {
-			"acl": [ "luci-mod-system-ssh" ],
-			"fs": {	"/usr/sbin/dropbear": "executable" }
-		}
-	},
-
-	"admin/system/admin/uhttpd": {
-		"title": "HTTP(S) Access",
-		"order": 4,
-		"action": {
-			"type": "view",
-			"path": "system/uhttpd"
-		},
-		"depends": {
-			"acl": [ "luci-mod-system-uhttpd" ],
-			"fs": {	"/usr/sbin/uhttpd": "executable" }
-		}
-	},
-
-
-	"admin/system/startup": {
-		"title": "Startup",
-		"order": 45,
-		"action": {
-			"type": "view",
-			"path": "system/startup"
-		},
-		"depends": {
-			"acl": [ "luci-mod-system-init" ]
-		}
-	},
-
-	"admin/system/crontab": {
-		"title": "Scheduled Tasks",
-		"order": 46,
-		"action": {
-			"type": "view",
-			"path": "system/crontab"
-		},
-		"depends": {
-			"acl": [ "luci-mod-system-cron" ]
-		}
-	},
-
-	"admin/system/mounts": {
-		"title": "Mount Points",
-		"order": 50,
-		"action": {
-			"type": "view",
-			"path": "system/mounts"
-		},
-		"depends": {
-			"acl": [ "luci-mod-system-mounts" ],
-			"fs": { "/sbin/block": "executable" }
-		}
-	},
-
-	"admin/system/leds": {
-		"title": "LED Configuration",
-		"order": 60,
-		"action": {
-			"type": "view",
-			"path": "system/leds"
-		},
-		"depends": {
-			"acl": [ "luci-mod-system-config" ],
-			"fs": { "/sys/class/leds": "directory" }
-		}
-	},
-
 	"admin/system/flash": {
-		"title": "Backup / Flash Firmware",
-		"order": 70,
+		"title": "Version Control",
+		"order": 20,
 		"action": {
 			"type": "view",
 			"path": "system/flash"
@@ -136,15 +23,15 @@
 		}
 	},
 
-	"admin/system/reboot": {
-		"title": "Reboot",
-		"order": 90,
+	"admin/system/backup": {
+		"title": "Configuration Backup",
+		"order": 30,
 		"action": {
 			"type": "view",
-			"path": "system/reboot"
+			"path": "system/backup"
 		},
 		"depends": {
-			"acl": [ "luci-mod-system-reboot" ]
+			"acl": [ "luci-mod-system-backup" ]
 		}
 	}
 }
