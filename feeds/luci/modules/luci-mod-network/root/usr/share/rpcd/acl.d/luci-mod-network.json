@@ -9,12 +9,14 @@
 				"/proc/sys/net/ipv6/conf/*/hop_limit": [ "read" ],
 				"/usr/libexec/luci-peeraddr": [ "exec" ],
 				"/proc/sys/net/ipv[46]/conf/*": [ "read" ],
-				"/sys/class/net/*/brport/*": [ "read" ]
+				"/sys/class/net/*/brport/*": [ "read" ],
+				"/sbin/ip": [ "exec" ],
+				"/sbin/swconfig": [ "exec" ]
 			},
 			"ubus": {
 				"file": [ "exec" ],
 				"iwinfo": [ "assoclist", "countrylist", "freqlist", "txpowerlist" ],
-				"luci": [ "getSwconfigFeatures", "getSwconfigPortState" ]
+				"luci": [ "getSwconfigFeatures", "getSwconfigPortState", "getNetDeviceStatus", "getSwitchPortStatus" ]
 			},
 			"uci": [ "dhcp", "firewall", "network", "wireless", "system" ]
 		},
