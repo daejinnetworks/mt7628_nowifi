@@ -550,7 +550,7 @@ const methods = {
 			let board = fd ? json(fd) : {};
 			let ports = [];
 
-			for (let k in [ 'lan', 'wan' ]) {
+			for (let k in [ 'lan', 'wan', 'VPN', 'LAN' ]) {
 				if (!board?.network?.[k])
 					continue;
 
@@ -621,6 +621,108 @@ const methods = {
 			} else {
 				return { error: 'No user found in session' };
 			}
+		}
+	},
+
+	getNetDeviceStatus: {
+		args: { device: 'string' },
+		call: function(request) {
+			let dev;
+			if (request.args.device == 'VPN') {
+				dev = 'eth0.1';
+			} else if (request.args.device == 'LAN') {
+				dev = 'eth0.2';
+			} else {
+				dev = request.args.device;
+			}
+
+			let result = {
+				device: dev,
+				macaddr: null,
+				mtu: null,
+				ipv4: [],
+				operstate: null
+			};
+
+			// Get network interface information using ip command
+			let ipout = popen(`ip -details addr show ${dev}`, 'r');
+			if (ipout) {
+				let iptxt = ipout.read('all');
+				ipout.close();
+
+				// MAC address
+				let mac = match(iptxt, /link\/ether ([0-9a-f:]+)/);
+				if (mac) {
+					result.macaddr = mac[1];
+				}
+
+				// MTU
+				let mtu = match(iptxt, /mtu (\d+)/);
+				if (mtu) {
+					result.mtu = +mtu[1];
+				}
+
+				// IPv4
+				for (let line in split(iptxt, "\n")) {
+					let m = match(line, /inet ([0-9.]+)\/(\d+)/);
+					if (m) {
+						push(result.ipv4, { address: m[1], mask: parseInt(m[2], 10) });
+					}
+				}
+
+				// operstate
+				let state = match(iptxt, /state ([A-Z]+)/);
+				if (state) {
+					result.operstate = state[1];
+				}
+			}
+
+			return result;
+		}
+	},
+
+	getSwitchPortStatus: {
+		args: { device: 'string' },
+		call: function(request) {
+			let dev = request.args.device;
+			let port;
+
+			if (dev == 'eth0.1' || dev == 'VPN') {
+				port = '0';
+			}
+			else if (dev == 'eth0.2' || dev == 'LAN') {
+				port = '4';
+			}
+			else {
+				port = '6';
+			}
+
+			let result = {
+				link: null,
+				speed: null,
+				duplex: null
+			};
+
+			let swout = popen(`swconfig dev switch0 port ${port} get link 2>/dev/null`, 'r');
+			if (swout) {
+				let swtxt = swout.read('all');
+				swout.close();
+				if (match(swtxt, /link:/)) {
+					let link = match(swtxt, /link:(up|down)/);
+					let speed = match(swtxt, /speed:(\d+baseT)/);
+					let duplex = match(swtxt, /(full-duplex|half-duplex)/);
+					if (link) {
+						result.link = (link[1] == 'up') ? 'up' : 'down';
+					}
+					if (speed) {
+						result.speed = speed[1];
+					}
+					if (duplex) {
+						result.duplex = duplex[1];
+					}
+				}
+			}
+			return result;
 		}
 	}
 };
