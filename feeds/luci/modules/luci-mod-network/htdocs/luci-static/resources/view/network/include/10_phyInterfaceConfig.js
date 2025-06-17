@@ -93,7 +93,7 @@ return view.extend({
 			E('div', { 
 				'style': 'display: flex; align-items: center; margin-bottom: 0px; ' +
 				         'background-image: url(/luci-static/bootstrap/bg-tile.png); ' +
-				         'background-repeat: repeat; padding: 10px; border-radius: 5px; ' +
+				         'background-repeat: repeat; padding: 5px 10px; border-radius: 5px; ' +
 				         'opacity: 0.7;'
 			}, [
 				E('div', { 'style': 'margin-right: 200px; display: flex; gap: 10px;' }, [
@@ -107,11 +107,11 @@ return view.extend({
 					]),
 					E('div', { 
 						'id': 'refresh-button',
-						'style': 'display: flex; align-items: center; gap: 5px; padding: 8px 16px; ' +
+						'style': 'display: flex; align-items: center; gap: 5px; padding: 4px 12px; ' +
 								 'background-color: white; color: #007bff; border: 2px solid #007bff; ' +
 								 'border-radius: 5px; cursor: pointer; font-weight: normal; ' +
 								 'transition: all 0.3s ease; user-select: none; font-size: 14px; ' +
-								 'width: 100px; justify-content: center;',
+								 'width: 110px; min-width: 110px; max-width: 110px; justify-content: center; box-sizing: border-box;',
 						'click': L.bind(this.handleRefresh, this),
 						'onmouseover': function() {
 							if (this.getAttribute('data-active') !== 'true') {
@@ -283,11 +283,11 @@ return view.extend({
 				refreshBtn.setAttribute('data-active', 'false');
 				return Promise.resolve();
 			} else {
-				// 활성화 상태로 변경 (skyblue 배경)
-				refreshBtn.style.backgroundColor = 'skyblue';
+				// 활성화 상태로 변경 (진한 파란색 배경)
+				refreshBtn.style.backgroundColor = '#007bff';
 				refreshBtn.style.color = 'white';
 				refreshBtn.style.fontWeight = 'bold';
-				refreshBtn.style.border = '2px solid skyblue';
+				refreshBtn.style.border = '2px solid #007bff';
 				refreshBtn.setAttribute('data-active', 'true');
 			}
 		}
