@@ -212,11 +212,11 @@ div.modal.login {
             <div class="xn-login-form">
                 <div style="flex:1;display:flex;flex-direction:column;">
                     <label class="xn-login-label" for="luci_username">USER.ID</label>
-                    <input class="xn-login-input" type="text" id="luci_username" name="luci_username" value="" autofocus />
+                    <input class="xn-login-input" type="text" id="luci_username" name="luci_username" value="" autofocus autocomplete="username" />
                 </div>
                 <div style="flex:1;display:flex;flex-direction:column;">
                     <label class="xn-login-label" for="luci_password">USER.PASSWORD</label>
-                    <input class="xn-login-input" type="password" id="luci_password" name="luci_password" />
+                    <input class="xn-login-input" type="password" id="luci_password" name="luci_password" autocomplete="current-password" />
                 </div>
                 <div style="display:flex;flex-direction:column;align-items:center;min-width:140px;">
                     <label class="xn-login-label">&nbsp;</label>

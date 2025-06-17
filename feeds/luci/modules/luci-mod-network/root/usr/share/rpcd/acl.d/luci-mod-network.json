@@ -11,7 +11,9 @@
 				"/proc/sys/net/ipv[46]/conf/*": [ "read" ],
 				"/sys/class/net/*/brport/*": [ "read" ],
 				"/sbin/ip": [ "exec" ],
-				"/sbin/swconfig": [ "exec" ]
+				"/sbin/swconfig": [ "exec" ],
+				"/www/luci-static/resources/view/network/include": [ "list" ],
+				"/www/luci-static/resources/view/network/include/*": [ "list", "read" ]
 			},
 			"ubus": {
 				"file": [ "exec" ],

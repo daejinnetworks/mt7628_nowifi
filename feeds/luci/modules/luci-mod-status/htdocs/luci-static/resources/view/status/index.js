@@ -63,6 +63,11 @@ function startPolling(includes, containers) {
 
 return view.extend({
 	load: function() {
+		// Skip loading includes if not authenticated
+		if (!L.session || !L.session.getToken()) {
+			return Promise.resolve([]);
+		}
+		
 		return L.resolveDefault(fs.list('/www' + L.resource('view/status/include')), []).then(function(entries) {
 			return Promise.all(entries.filter(function(e) {
 				return (e.type == 'file' && e.name.match(/\.js$/));

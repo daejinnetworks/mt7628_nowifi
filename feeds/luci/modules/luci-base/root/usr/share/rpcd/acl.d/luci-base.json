@@ -2,8 +2,13 @@
 	"unauthenticated": {
 		"description": "Allow system feature probing",
 		"read": {
+			"file": {
+				"/www/luci-static/resources/view/*/include": [ "list" ],
+				"/www/luci-static/resources/view/*/include/*": [ "list", "read" ]
+			},
 			"ubus": {
-				"luci": [ "getFeatures" ]
+				"luci": [ "getFeatures" ],
+				"file": [ "list" ]
 			}
 		}
 	},
