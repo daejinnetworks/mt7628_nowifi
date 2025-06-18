@@ -99,10 +99,13 @@ return view.extend({
 				E('div', { 'style': 'margin-right: 200px; display: flex; gap: 10px;' }, [
 					E('button', { 
 						'class': 'btn cbi-button cbi-button-action',
-						'style': 'display: flex; align-items: center; gap: 5px;',
+						'style': 'display: flex; align-items: center; gap: 5px; border: 2px solid #007bff; border-radius: 5px;',
 						'click': L.bind(this.handleChange, this)
 					}, [
-						E('i', { 'class': 'fas fa-edit' }),
+						E('img', { 
+							'src': '/luci-static/bootstrap/change.png',
+							'style': 'width: 16px; height: 16px;'
+						}),
 						_('Change')
 					]),
 					E('div', { 
@@ -242,31 +245,370 @@ return view.extend({
 		});
 	},
 
-	handleChange: function() {
+	handleChange: function(device) {
 		// Change 버튼: 선택된 인터페이스의 설정 변경
 		var selected = document.querySelector('input[name="interface_select"]:checked');
 		if (selected) {
 			var device = selected.value;
-			ui.showModal(_('Interface Configuration'), [
-				E('p', _('Configure interface: %s').format(device)),
-				E('div', { 'class': 'right' }, [
-					E('button', {
-						'class': 'btn cbi-button',
-						'click': ui.hideModal
-					}, _('Cancel')),
-					E(' '),
-					E('button', {
-						'class': 'btn cbi-button cbi-button-positive',
-						'click': function() {
-							ui.hideModal();
-							ui.addNotification(null, E('p', _('Interface configuration saved')), 'info');
+			var self = this;
+			
+			// 현재 설정 로드
+			var sectionName = device === 'VPN' ? 'VPN' : 'LAN';
+			var currentConfig = uci.get('network', sectionName) || {};
+			
+			// 현재 네트워크 상태 가져오기
+			var physicalDevice = device === 'VPN' ? 'eth0.1' : 'eth0.2';
+			return Promise.all([
+				L.resolveDefault(callNetDeviceStatus(physicalDevice), {}),
+				L.resolveDefault(callSwitchPortStatus(physicalDevice), {})
+			]).then(function(data) {
+				var netStatus = data[0] || {};
+				var switchStatus = data[1] || {};
+				
+				// DNS 배열 처리
+				var dnsServers = [];
+				if (currentConfig.dns) {
+					if (Array.isArray(currentConfig.dns)) {
+						dnsServers = currentConfig.dns;
+					} else if (typeof currentConfig.dns === 'string') {
+						dnsServers = [currentConfig.dns];
+					}
+				}
+				
+				// 현재 프로토콜 값 확인
+				var currentProto = currentConfig.proto || 'static';
+				
+				// DHCP 모드일 때는 netStatus에서 값을 가져옴
+				var currentIp = currentProto === 'dhcp' ? netStatus.ipaddr : currentConfig.ipaddr;
+				var currentNetmask = currentProto === 'dhcp' ? netStatus.netmask : (currentConfig.netmask || '255.255.255.0');
+				var currentGateway = currentProto === 'dhcp' ? netStatus.gateway : currentConfig.gateway;
+				
+				// 프로토콜 선택 옵션 정의
+				var protoChoices = {
+					'static': _('Static address'),
+					'dhcp': _('DHCP client')
+				};
+				
+				var netmaskChoices = [
+					['255.255.255.0', '/24 (255.255.255.0)'],
+					['255.255.0.0', '/16 (255.255.0.0)'],
+					['255.0.0.0', '/8 (255.0.0.0)'],
+					['255.255.255.128', '/25 (255.255.255.128)'],
+					['255.255.255.192', '/26 (255.255.255.192)']
+				];
+				
+				// 프로토콜 Select 위젯 생성
+				var protoSelect = new ui.Select('proto', protoChoices, {
+					id: 'modal-proto',
+					default: currentProto,
+					value: currentProto,
+					style: 'width: 100%; padding: 12px; border: 2px solid #e1e8ed; border-radius: 8px; font-size: 14px; transition: border-color 0.3s ease;'
+				});
+				
+				// Netmask Select 위젯 생성
+				var netmaskSelect = new ui.Select('netmask', netmaskChoices, {
+					id: 'modal-netmask',
+					default: currentNetmask,
+					value: currentNetmask,
+					disabled: currentProto !== 'static',
+					style: `width: 100%; padding: 12px; border: 2px solid #e1e8ed; border-radius: 8px; font-size: 14px; transition: border-color 0.3s ease; opacity: ${currentProto === 'static' ? '1' : '0.5'};`
+				});
+
+				// 모달 제목 설정
+				var modalTitle = device === 'VPN' ? _('Configure VPN Interface') : _('Configure LAN Interface');
+				
+				ui.showModal(modalTitle, [
+					E('div', { 
+						'style': 'max-width: 600px; padding: 20px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 15px; box-shadow: 0 20px 40px rgba(0,0,0,0.1);'
+					}, [
+						// 헤더
+						E('div', { 'style': 'text-align: center; margin-bottom: 20px;' }, [
+							E('h2', { 'style': 'color: white; margin: 0; font-size: 24px; font-weight: 300;' }, _('Configure %s Interface').format(device)),
+							E('p', { 'style': 'color: rgba(255,255,255,0.8); margin: 5px 0 0 0; font-size: 14px;' }, _('Network Configuration Settings'))
+						]),
+						
+						// 폼 컨테이너
+						E('div', { 
+							'style': 'background: white; border-radius: 12px; padding: 25px; box-shadow: 0 10px 30px rgba(0,0,0,0.1);'
+						}, [
+							// Protocol 설정
+							E('div', { 'style': 'margin-bottom: 20px;' }, [
+								E('label', { 'style': 'display: block; font-weight: 600; color: #333; margin-bottom: 8px; font-size: 14px;' }, _('Protocol')),
+								protoSelect.render()
+							]),
+							
+							// IP Address 설정
+							E('div', { 'style': 'margin-bottom: 20px;' }, [
+								E('label', { 'style': 'display: block; font-weight: 600; color: #333; margin-bottom: 8px; font-size: 14px;' }, _('IP Address')),
+								E('input', {
+									'id': 'modal-ipaddr',
+									'type': 'text',
+									'placeholder': '192.168.1.1',
+									'value': currentIp || '',
+									'disabled': currentProto !== 'static',
+									'style': `width: 100%; padding: 12px; border: 2px solid #e1e8ed; border-radius: 8px; font-size: 14px; transition: all 0.3s ease; opacity: ${currentProto === 'static' ? '1' : '0.5'};`,
+									'onfocus': function() { 
+										if (!this.disabled) {
+											this.style.borderColor = '#667eea'; 
+											this.style.boxShadow = '0 0 0 3px rgba(102, 126, 234, 0.1)'; 
+										}
+									},
+									'onblur': function() { 
+										if (!this.disabled) {
+											this.style.borderColor = '#e1e8ed'; 
+											this.style.boxShadow = 'none'; 
+										}
+									}
+								})
+							]),
+							
+							// Netmask 설정
+							E('div', { 'style': 'margin-bottom: 20px;' }, [
+								E('label', { 'style': 'display: block; font-weight: 600; color: #333; margin-bottom: 8px; font-size: 14px;' }, _('Netmask')),
+								netmaskSelect.render()
+							]),
+							
+							// Gateway 설정
+							E('div', { 'style': 'margin-bottom: 20px;' }, [
+								E('label', { 'style': 'display: block; font-weight: 600; color: #333; margin-bottom: 8px; font-size: 14px;' }, _('Gateway')),
+								E('input', {
+									'id': 'modal-gateway',
+									'type': 'text',
+									'placeholder': '192.168.1.1',
+									'value': currentGateway || '',
+									'disabled': currentProto !== 'static',
+									'style': `width: 100%; padding: 12px; border: 2px solid #e1e8ed; border-radius: 8px; font-size: 14px; transition: all 0.3s ease; opacity: ${currentProto === 'static' ? '1' : '0.5'};`,
+									'onfocus': function() { 
+										if (!this.disabled) {
+											this.style.borderColor = '#667eea'; 
+											this.style.boxShadow = '0 0 0 3px rgba(102, 126, 234, 0.1)'; 
+										}
+									},
+									'onblur': function() { 
+										if (!this.disabled) {
+											this.style.borderColor = '#e1e8ed'; 
+											this.style.boxShadow = 'none'; 
+										}
+									}
+								})
+							]),
+							
+							// DNS 설정
+							E('div', { 'style': 'margin-bottom: 20px;' }, [
+								E('label', { 'style': 'display: block; font-weight: 600; color: #333; margin-bottom: 8px; font-size: 14px;' }, _('DNS Servers')),
+								E('div', { 'style': 'margin-bottom: 10px;' }, [
+									E('input', {
+										'id': 'modal-dns1',
+										'type': 'text',
+										'placeholder': _('Primary DNS (e.g., 8.8.8.8)'),
+										'value': dnsServers[0] || '',
+										'style': 'width: 100%; padding: 12px; border: 2px solid #e1e8ed; border-radius: 8px; font-size: 14px; transition: all 0.3s ease;',
+										'onfocus': function() { 
+											this.style.borderColor = '#667eea'; 
+											this.style.boxShadow = '0 0 0 3px rgba(102, 126, 234, 0.1)'; 
+										},
+										'onblur': function() { 
+											this.style.borderColor = '#e1e8ed'; 
+											this.style.boxShadow = 'none'; 
+										}
+									})
+								]),
+								E('div', { 'style': 'margin-bottom: 10px;' }, [
+									E('input', {
+										'id': 'modal-dns2',
+										'type': 'text',
+										'placeholder': _('Secondary DNS (e.g., 8.8.4.4)'),
+										'value': dnsServers[1] || '',
+										'style': 'width: 100%; padding: 12px; border: 2px solid #e1e8ed; border-radius: 8px; font-size: 14px; transition: all 0.3s ease;',
+										'onfocus': function() { 
+											this.style.borderColor = '#667eea'; 
+											this.style.boxShadow = '0 0 0 3px rgba(102, 126, 234, 0.1)'; 
+										},
+										'onblur': function() { 
+											this.style.borderColor = '#e1e8ed'; 
+											this.style.boxShadow = 'none'; 
+										}
+									})
+								])
+							]),
+							
+							// Auto start 설정
+							E('div', { 'style': 'margin-bottom: 25px;' }, [
+								E('label', { 'style': 'display: flex; align-items: center; cursor: pointer; font-weight: 600; color: #333; font-size: 14px;' }, [
+									E('input', {
+										'id': 'modal-auto',
+										'type': 'checkbox',
+										'checked': currentConfig.auto !== '0',
+										'style': 'margin-right: 10px; transform: scale(1.2);'
+									}),
+									_('Start interface on boot')
+								])
+							]),
+							
+							// 버튼 영역
+							E('div', { 'style': 'display: flex; gap: 12px; justify-content: flex-end; padding-top: 20px; border-top: 1px solid #f0f0f0;' }, [
+								E('button', {
+									'style': 'padding: 12px 24px; border: 2px solid #6c757d; background: white; color: #6c757d; border-radius: 8px; cursor: pointer; font-weight: 600; transition: all 0.3s ease;',
+									'onmouseover': function() { this.style.background = '#6c757d'; this.style.color = 'white'; },
+									'onmouseout': function() { this.style.background = 'white'; this.style.color = '#6c757d'; },
+									'click': ui.hideModal
+								}, _('Cancel')),
+								E('button', {
+									'style': 'padding: 12px 24px; border: 2px solid #667eea; background: #667eea; color: white; border-radius: 8px; cursor: pointer; font-weight: 600; transition: all 0.3s ease;',
+									'onmouseover': function() { this.style.background = '#5a6fd8'; this.style.borderColor = '#5a6fd8'; },
+									'onmouseout': function() { this.style.background = '#667eea'; this.style.borderColor = '#667eea'; },
+									'click': function() {
+										self.saveNetworkConfig(device, protoSelect, netmaskSelect);
+									}
+								}, _('Save Changes'))
+							])
+						])
+					])
+				]);
+				
+				// 프로토콜 변경 시 이벤트 리스너 설정
+				protoSelect.node.addEventListener('change', function() {
+					var selectedProto = protoSelect.getValue();
+					var isStatic = selectedProto === 'static';
+					
+					// DHCP 선택 시 현재 네트워크 상태 가져오기
+					if (!isStatic) {
+						L.resolveDefault(callNetDeviceStatus(physicalDevice), {}).then(function(status) {
+							var ipField = document.getElementById('modal-ipaddr');
+							var gatewayField = document.getElementById('modal-gateway');
+							var netmaskNode = netmaskSelect.node;
+							
+							if (ipField && status.ipaddr) {
+								ipField.value = status.ipaddr;
+								ipField.disabled = true;
+								ipField.style.opacity = '0.5';
+							}
+							
+							if (gatewayField && status.gateway) {
+								gatewayField.value = status.gateway;
+								gatewayField.disabled = true;
+								gatewayField.style.opacity = '0.5';
+							}
+							
+							if (netmaskNode && status.netmask) {
+								netmaskSelect.setValue(status.netmask);
+								netmaskNode.disabled = true;
+								netmaskNode.style.opacity = '0.5';
+							}
+						});
+					} else {
+						// Static 모드로 변경 시 필드 활성화 및 기존 설정값 복원
+						var ipField = document.getElementById('modal-ipaddr');
+						var gatewayField = document.getElementById('modal-gateway');
+						var netmaskNode = netmaskSelect.node;
+						
+						if (ipField) {
+							ipField.disabled = false;
+							ipField.style.opacity = '1';
+							// 기존 static 설정값이 있으면 복원
+							if (currentConfig.ipaddr) {
+								ipField.value = currentConfig.ipaddr;
+							}
 						}
-					}, _('Save'))
-				])
-			]);
+						
+						if (gatewayField) {
+							gatewayField.disabled = false;
+							gatewayField.style.opacity = '1';
+							// 기존 static 설정값이 있으면 복원
+							if (currentConfig.gateway) {
+								gatewayField.value = currentConfig.gateway;
+							}
+						}
+						
+						if (netmaskNode) {
+							netmaskNode.disabled = false;
+							netmaskNode.style.opacity = '1';
+							// 기존 static 설정값이 있으면 복원
+							if (currentConfig.netmask) {
+								netmaskSelect.setValue(currentConfig.netmask);
+							}
+						}
+					}
+				});
+				
+			}).catch(function(err) {
+				console.error('Failed to load network status:', err);
+				ui.addNotification(null, E('p', _('Failed to load network status')), 'error');
+			});
 		} else {
 			ui.addNotification(null, E('p', _('Please select an interface first')), 'warning');
 		}
+	},
+	
+	saveNetworkConfig: function(device, protoSelect, netmaskSelect) {
+		var proto = protoSelect.getValue();
+		var netmask = netmaskSelect.getValue();
+		var ipaddr = document.getElementById('modal-ipaddr').value;
+		var gateway = document.getElementById('modal-gateway').value;
+		var dns1 = document.getElementById('modal-dns1').value.trim();
+		var dns2 = document.getElementById('modal-dns2').value.trim();
+		var auto = document.getElementById('modal-auto').checked;
+		
+		// UCI 설정 저장
+		var sectionName = device === 'VPN' ? 'VPN' : 'LAN';
+		
+		console.log('Selected protocol:', proto); // 디버깅용
+		
+		// Protocol 설정 (static 또는 dhcp만 허용)
+		if (proto !== 'static' && proto !== 'dhcp') {
+			ui.addNotification(null, E('p', _('Invalid protocol selected. Only static or dhcp is allowed.')), 'error');
+			return;
+		}
+		
+		uci.set('network', sectionName, 'proto', proto);
+		
+		// Static IP 설정
+		if (proto === 'static') {
+			if (ipaddr) uci.set('network', sectionName, 'ipaddr', ipaddr);
+			if (netmask) uci.set('network', sectionName, 'netmask', netmask);
+			if (gateway) uci.set('network', sectionName, 'gateway', gateway);
+		} else {
+			// DHCP인 경우 static 관련 설정 제거
+			uci.unset('network', sectionName, 'ipaddr');
+			uci.unset('network', sectionName, 'netmask');
+			uci.unset('network', sectionName, 'gateway');
+		}
+		
+		// DNS 설정 (list dns 형태로 저장)
+		uci.unset('network', sectionName, 'dns'); // 기존 DNS 설정 제거
+		var dnsServers = [];
+		if (dns1) dnsServers.push(dns1);
+		if (dns2) dnsServers.push(dns2);
+		
+		if (dnsServers.length > 0) {
+			// UCI의 list 형태로 DNS 설정
+			dnsServers.forEach(function(dns) {
+				uci.add_list('network', sectionName, 'dns', dns);
+			});
+		}
+		
+		// Auto start 설정
+		uci.set('network', sectionName, 'auto', auto ? '1' : '0');
+		
+		console.log('Saving config for', sectionName, {
+			proto: proto,
+			ipaddr: ipaddr,
+			netmask: netmask,
+			gateway: gateway,
+			dns: dnsServers,
+			auto: auto
+		});
+		
+		// 설정 저장 및 적용
+		return uci.save()
+			.then(L.bind(uci.apply, uci))
+			.then(function() {
+				ui.hideModal();
+				ui.addNotification(null, E('p', _('Network configuration saved successfully')), 'info');
+			})
+			.catch(function(err) {
+				ui.addNotification(null, E('p', _('Failed to save configuration: %s').format(err.message)), 'error');
+			});
 	},
 
 	handleRefresh: function() {
