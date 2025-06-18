@@ -11,7 +11,7 @@ echo -n "Updating modules/luci-base/po/templates/base.pot ... "
 	modules/luci-base modules/luci-compat modules/luci-lua-runtime \
 	modules/luci-mod-network modules/luci-mod-status modules/luci-mod-system \
 	modules/luci-mod-logout modules/luci-mod-administrator modules/luci-mod-advanced \
-	protocols themes \
+	modules/luci-mod-vpn protocols themes \
 	modules/luci-base/po/templates/base.pot
 
 echo "done"
