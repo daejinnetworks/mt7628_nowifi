@@ -11,98 +11,193 @@ USE_PROCD=1
 PROG=/usr/sbin/ewsvpnc
 PIDFILE=/var/run/ewsvpnc.pid
 
-# Configuration file path
-CONFIG_FILE=/etc/ewsvpnc/ewsvpnc.conf
+validate_ewsvpnc_section() {
+    # Direct UCI access instead of uci_load_validate
+    enabled=$(uci -q get ewsvpnc.$1.enabled)
+    config_file=$(uci -q get ewsvpnc.$1.config_file)
+    home_dir=$(uci -q get ewsvpnc.$1.home_dir)
 
-validate_section_ewsvpnc() {
-    uci_load_validate ewsvpnc ewsvpnc "$1" "$2" \
-        'enabled:bool:0' \
-        'config_file:string:/etc/ewsvpnc/ewsvpnc.conf' \
-        'home_dir:string:/etc/ewsvpnc'
+    # Set defaults if empty
+    enabled=${enabled:-1}
+    config_file=${config_file:-/etc/ewsvpnc/ewsvpnc.conf}
+    home_dir=${home_dir:-/etc/ewsvpnc}
+
+    # Export variables for use in calling function
+    export enabled config_file home_dir
+
+    return 0
 }
 
-start_service() {
-    validate_section_ewsvpnc ewsvpnc || {
-        echo "Validation failed"
-        return 1
-    }
+start_instance() {
+    validate_ewsvpnc_section "$1" || return 1
 
-    [ "$enabled" = "1" ] || {
-        echo "ewsvpnc is disabled"
+    if [ "$enabled" != "1" ]; then
         return 1
-    }
+    fi
 
-    [ -f "$config_file" ] || {
+    if [ ! -f "$config_file" ]; then
         echo "Configuration file not found: $config_file"
         return 1
-    }
+    fi
 
-    # Create home directory if it doesn't exist
-    [ -d "$home_dir" ] || mkdir -p "$home_dir"
+    if [ ! -d "$home_dir" ]; then
+        mkdir -p "$home_dir" || {
+            echo "Failed to create home directory: $home_dir"
+            return 1
+        }
+    fi
 
-    procd_open_instance
+    procd_open_instance "$1"
     procd_set_param command "$PROG" -c "$config_file"
     procd_set_param pidfile "$PIDFILE"
     procd_set_param respawn ${respawn_threshold:-3600} ${respawn_timeout:-5} ${respawn_retry:-5}
     procd_set_param stdout 1
     procd_set_param stderr 1
+    procd_set_param user root
+    procd_set_param group root
+
+    # Add file descriptor limits and other limits
+    procd_set_param limits core="unlimited"
+    procd_set_param limits nofile=4096
+
+    # Add environment variables if needed
+    procd_set_param env HOME="$home_dir"
+
+    # Monitor file changes that should trigger restarts
+    procd_set_param file "$config_file"
+
     procd_close_instance
 }
 
+start_service() {
+    # Check if program exists
+    if [ ! -x "$PROG" ]; then
+        echo "Error: Program not found or not executable: $PROG"
+        return 1
+    fi
+
+    config_load ewsvpnc
+    config_foreach start_instance ewsvpnc
+}
+
 stop_service() {
-    [ -f "$PIDFILE" ] && {
-        local pid=$(cat "$PIDFILE")
-        [ -n "$pid" ] && kill "$pid"
-        rm -f "$PIDFILE"
-    }
+    # procd will handle stopping instances automatically
+    return 0
 }
 
 reload_service() {
-    validate_section_ewsvpnc ewsvpnc || {
-        echo "Validation failed during reload"
-        return 1
-    }
+    # Check if any instances are running
+    local running_instances=$(ubus call service list '{"name": "ewsvpnc"}' 2>/dev/null | jsonfilter -e '@.ewsvpnc.instances.*.running' 2>/dev/null | grep -c "true" || echo "0")
 
-    [ "$enabled" = "1" ] || {
-        echo "ewsvpnc is disabled, stopping service"
-        stop
-        return 0
-    }
-
-    [ -f "$config_file" ] || {
-        echo "Configuration file not found: $config_file"
-        return 1
-    }
-
-    # Create home directory if it doesn't exist
-    [ -d "$home_dir" ] || mkdir -p "$home_dir"
-
-    # Send SIGHUP to reload configuration
-    [ -f "$PIDFILE" ] && {
-        local pid=$(cat "$PIDFILE")
-        [ -n "$pid" ] && {
-            if kill -0 "$pid" 2>/dev/null; then
-                echo "Reloading ewsvpnc configuration..."
-                kill -HUP "$pid"
-            else
-                echo "Process not running, starting service..."
-                start
-            fi
-        }
-    } || {
-        echo "PID file not found, starting service..."
+    if [ "$running_instances" -gt 0 ]; then
+        # Send SIGHUP to running processes for graceful reload
+        local pids=$(pgrep -f "$PROG")
+        if [ -n "$pids" ]; then
+            echo "$pids" | while read pid; do
+                if [ -n "$pid" ]; then
+                    kill -HUP "$pid" 2>/dev/null
+                fi
+            done
+        else
+            restart
+        fi
+    else
         start
-    }
+    fi
 }
 
 restart() {
-    echo "Restarting ewsvpnc service..."
     stop
     sleep 2
     start
 }
 
+status() {
+    local service_info=$(ubus call service list '{"name": "ewsvpnc"}' 2>/dev/null)
+    if [ -n "$service_info" ]; then
+        local running_count=$(echo "$service_info" | jsonfilter -e '@.ewsvpnc.instances.*.running' 2>/dev/null | grep -c "true" || echo "0")
+        local total_count=$(echo "$service_info" | jsonfilter -e '@.ewsvpnc.instances.*' 2>/dev/null | wc -l || echo "0")
+
+        if [ "$running_count" -gt 0 ]; then
+            echo "ewsvpnc is running ($running_count/$total_count instances active)"
+
+            # Show process details
+            local pids=$(pgrep -f "$PROG")
+            if [ -n "$pids" ]; then
+                echo "PIDs: $pids"
+                echo "$pids" | while read pid; do
+                    if [ -n "$pid" ]; then
+                        ps -o pid,ppid,user,stat,start,time,comm,args "$pid" 2>/dev/null | grep -v "PID"
+                    fi
+                done
+            fi
+
+            # Show PID file if exists
+            if [ -f "$PIDFILE" ]; then
+                echo "PID file: $PIDFILE ($(cat "$PIDFILE" 2>/dev/null))"
+            fi
+
+            return 0
+        else
+            echo "ewsvpnc is not running (service registered but no active instances)"
+            return 1
+        fi
+    else
+        echo "ewsvpnc is not running (service not registered)"
+        return 1
+    fi
+}
+
+enable() {
+    # Enable service to start at boot
+    /etc/rc.common "$0" enable
+    local result=$?
+
+    # Also enable in UCI if not already enabled
+    config_load ewsvpnc
+    local current_enabled=$(uci -q get ewsvpnc.ewsvpnc.enabled)
+    if [ "$current_enabled" != "1" ]; then
+        uci set ewsvpnc.ewsvpnc.enabled='1'
+        uci commit ewsvpnc
+        echo "ewsvpnc enabled in UCI configuration"
+    fi
+
+    return $result
+}
+
+disable() {
+    # Stop service first
+    stop
+
+    # Disable service from starting at boot
+    /etc/rc.common "$0" disable
+    local result=$?
+
+    # Also disable in UCI
+    uci set ewsvpnc.ewsvpnc.enabled='0'
+    uci commit ewsvpnc
+    echo "ewsvpnc disabled in UCI configuration"
+
+    return $result
+}
+
+boot() {
+    start
+}
+
+shutdown() {
+    stop
+}
+
 service_triggers() {
     procd_add_reload_trigger "ewsvpnc"
+}
+
+service_started() {
+    return 0
+}
+
+service_stopped() {
+    return 0
 }
 
