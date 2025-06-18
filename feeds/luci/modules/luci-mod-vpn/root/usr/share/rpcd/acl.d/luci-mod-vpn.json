@@ -1,0 +1,27 @@
+{
+	"luci-mod-vpn-client": {
+		"description": "Grant access to VPN client settings",
+		"read": {
+			"file": {
+				"/etc/ewsvpnc/ewsvpnc.conf": [ "read" ],
+				"/usr/sbin/ewsvpnc": [ "exec" ]
+			},
+			"ubus": {
+				"file": [ "exec" ],
+				"luci": [ "rebootSystem", "poweroffSystem" ]
+			},
+			"uci": [ "ewsvpnc" ]
+		},
+		"write": {
+			"file": {
+				"/etc/ewsvpnc/ewsvpnc.conf": [ "write" ],
+				"/usr/sbin/ewsvpnc": [ "exec" ]
+			},
+			"ubus": {
+				"file": [ "exec", "write" ],
+				"luci": [ "rebootSystem", "poweroffSystem" ]
+			},
+			"uci": [ "ewsvpnc" ]
+		}
+	}
+}

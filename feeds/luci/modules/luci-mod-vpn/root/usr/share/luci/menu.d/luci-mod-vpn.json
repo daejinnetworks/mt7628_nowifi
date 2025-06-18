@@ -1,0 +1,13 @@
+{
+	"admin/vpn/vpn_config": {
+		"title": "VPN Config Setting",
+		"order": 100,
+		"action": {
+			"type": "view",
+			"path": "vpn/client_config"
+		},
+		"depends": {
+			"acl": [ "luci-mod-vpn-client" ]
+		}
+	}
+}
