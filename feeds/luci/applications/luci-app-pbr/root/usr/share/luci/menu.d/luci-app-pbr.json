@@ -1,5 +1,5 @@
 {
-	"admin/services/pbr": {
+	"admin/network/pbr": {
 		"title": "Policy Routing",
 		"order": 90,
 		"action": {
