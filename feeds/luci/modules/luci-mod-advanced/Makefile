@@ -6,7 +6,7 @@
 
 include $(TOPDIR)/rules.mk
 
-LUCI_TITLE:=LuCI Logout Pages
+LUCI_TITLE:=LuCI Advanced Pages
 LUCI_DEPENDS:=+luci-base
 
 PKG_BUILD_DEPENDS:=
