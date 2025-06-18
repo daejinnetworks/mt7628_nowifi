@@ -45,6 +45,7 @@ define Package/ewsvpnc/install
 	$(INSTALL_DIR) \
 		$(1)/usr/sbin \
 		$(1)/etc/init.d \
+		$(1)/etc/ewsvpnc \
 		$(1)/etc/config
 
 	$(INSTALL_BIN) \
@@ -58,6 +59,14 @@ define Package/ewsvpnc/install
 	$(INSTALL_DATA) \
 		files/ewsvpnc.user \
 		$(1)/etc/ewsvpnc.user
+
+	$(INSTALL_DATA) \
+		files/ewsvpnc.conf \
+		$(1)/etc/ewsvpnc/ewsvpnc.conf
+
+	$(INSTALL_DATA) \
+		files/ewsvpnc.config \
+		$(1)/etc/config/ewsvpnc
 endef
 
 $(eval $(call BuildPackage,ewsvpnc))
