@@ -4,22 +4,35 @@
 		"read": {
 			"file": {
 				"/etc/ewsvpnc/ewsvpnc.conf": [ "read" ],
-				"/usr/sbin/ewsvpnc": [ "exec" ]
+				"/usr/sbin/ewsvpnc": [ "exec" ],
+				"/etc/init.d/ewsvpnc": [ "exec" ],
+				"/bin/ps": [ "exec" ],
+				"/usr/bin/pgrep": [ "exec" ],
+				"/usr/bin/killall": [ "exec" ],
+				"/var/run/ewsvpnc.pid": [ "read" ]
 			},
 			"ubus": {
-				"file": [ "exec" ],
-				"luci": [ "rebootSystem", "poweroffSystem" ]
+				"file": [ "exec", "read", "stat" ],
+				"service": [ "list", "get_data" ],
+				"system": [ "info", "board" ],
+				"luci": [ "getInitList", "setInitAction", "getConntrackList", "getVPNStatus" ]
 			},
 			"uci": [ "ewsvpnc" ]
 		},
 		"write": {
 			"file": {
 				"/etc/ewsvpnc/ewsvpnc.conf": [ "write" ],
-				"/usr/sbin/ewsvpnc": [ "exec" ]
+				"/usr/sbin/ewsvpnc": [ "exec" ],
+				"/etc/init.d/ewsvpnc": [ "exec" ],
+				"/bin/ps": [ "exec" ],
+				"/usr/bin/pgrep": [ "exec" ],
+				"/usr/bin/killall": [ "exec" ],
+				"/tmp/ewsvpnc.tmp": [ "write", "unlink" ]
 			},
 			"ubus": {
-				"file": [ "exec", "write" ],
-				"luci": [ "rebootSystem", "poweroffSystem" ]
+				"file": [ "exec", "write", "remove" ],
+				"service": [ "list", "set_data" ],
+				"luci": [ "setInitAction", "getVPNStatus" ]
 			},
 			"uci": [ "ewsvpnc" ]
 		}

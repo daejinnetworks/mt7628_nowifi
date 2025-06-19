@@ -4,7 +4,7 @@
 		"order": 100,
 		"action": {
 			"type": "view",
-			"path": "vpn/client_config"
+			"path": "vpn/client"
 		},
 		"depends": {
 			"acl": [ "luci-mod-vpn-client" ]

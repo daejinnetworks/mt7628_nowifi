@@ -739,7 +739,61 @@ const methods = {
 			}
 			return result;
 		}
+	},
+
+	// Add VPN service control methods
+	getVPNStatus: {
+		call: function() {
+			let result = {
+				running: false,
+				enabled: false,
+				error: null,
+				pid: null
+			};
+
+			// Check if service exists
+			if (system('test -x /etc/init.d/ewsvpnc') != 0) {
+				result.error = 'Service not installed';
+				return result;
+			}
+
+			// Check if enabled
+			result.enabled = (system('/etc/init.d/ewsvpnc enabled') == 0);
+
+			// Check if running (original working method)
+			result.running = (system('pidof ewsvpnc >/dev/null 2>&1 || pgrep -f "sh /usr/sbin/ewsvpnc" >/dev/null 2>&1') == 0);
+
+			// Get PID only if running
+			if (result.running) {
+				try {
+					const pidFile = open('/var/run/ewsvpnc.pid', 'r');
+					if (pidFile) {
+						const pidStr = pidFile.read('line');
+						pidFile.close();
+						if (pidStr) {
+							result.pid = int(pidStr);
+						}
+					}
+				} catch (e) {
+					// PID file not found, use pidof command
+					if (system('pidof ewsvpnc >/tmp/ewsvpnc.tmp 2>/dev/null') == 0) {
+						const tmpFile = open('/tmp/ewsvpnc.tmp', 'r');
+						if (tmpFile) {
+							const pidStr = tmpFile.read('line');
+							tmpFile.close();
+							if (pidStr) {
+								result.pid = int(pidStr);
+							}
+							system('rm -f /tmp/ewsvpnc.tmp');
+						}
+					}
+				}
+			}
+
+			return result;
+		}
 	}
+
 };
 
 return { luci: methods };
