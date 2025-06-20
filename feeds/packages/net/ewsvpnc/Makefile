@@ -53,6 +53,10 @@ define Package/ewsvpnc/install
 		$(1)/usr/sbin/
 
 	$(INSTALL_BIN) \
+		files/ewsvpnc.test \
+		$(1)/usr/sbin/
+
+	$(INSTALL_BIN) \
 		files/ewsvpnc.init \
 		$(1)/etc/init.d/ewsvpnc
 

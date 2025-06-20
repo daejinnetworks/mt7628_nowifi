@@ -237,6 +237,8 @@ return view.extend({
 	logMessages: [],
 	statusElements: {},
 	pollFn: null,
+	configFileData: {}, // Store config file settings separately
+	configChanged: false, // Track if config file has changes
 
 	handleServiceAction: function(action) {
 		var self = this;
@@ -356,14 +358,18 @@ return view.extend({
 
 	refreshServiceStatus: function() {
 		var self = this;
-		self.log('Checking service status...');
 		
 		return callServiceStatus().then(function(res) {
-			self.log('Status check result: ' + JSON.stringify(res));
+			// Get enabled status from UCI (not from service status)
+			var sections = uci.sections('ewsvpnc', 'ewsvpnc');
+			var isEnabled = false;
+			if (sections && sections.length > 0) {
+				isEnabled = sections[0].enabled === '1';
+			}
 			
 			// Update serviceInfo object
 			self.serviceInfo.running = res.running || false;
-			self.serviceInfo.enabled = res.enabled || false;
+			self.serviceInfo.enabled = isEnabled;
 			self.serviceInfo.error = res.error || null;
 			self.serviceInfo.pid = res.pid || null;
 			
@@ -410,7 +416,7 @@ return view.extend({
 			
 			// Update enabled status display
 			if (self.statusElements.enabledText) {
-				self.statusElements.enabledText.textContent = res.enabled ? _('Yes') : _('No');
+				self.statusElements.enabledText.textContent = self.serviceInfo.enabled ? _('Yes') : _('No');
 			}
 
 			return res;
@@ -458,27 +464,34 @@ return view.extend({
 		var self = this;
 		self.log('Updating config display...');
 		try {
+			var els = this.statusElements;
+			
+			// Update config file settings display (from configFileData)
+			if (els.serverText) {
+				var addr = self.configFileData.serv_addr || '172.16.130.26';
+				var port = self.configFileData.serv_port || '443';
+				els.serverText.textContent = addr + ':' + port;
+			}
+			
+			if (els.userText) {
+				els.userText.textContent = self.configFileData.user_id || 'user01';
+			}
+			
+			if (els.homeDirText) {
+				els.homeDirText.textContent = self.configFileData.home_dir || '/etc/ewsvpnc';
+			}
+			
+			// Update Auto Start status (from UCI)
 			var sections = uci.sections('ewsvpnc', 'ewsvpnc');
 			if (sections && sections.length > 0) {
 				var cfg = sections[0];
-				var els = this.statusElements;
-				
-				if (els.serverText) {
-					var addr = cfg.serv_addr || '172.16.130.26';
-					var port = cfg.serv_port || '443';
-					els.serverText.textContent = addr + ':' + port;
-				}
-				
-				if (els.userText) {
-					els.userText.textContent = cfg.user_id || 'user01';
-				}
-				
-				if (els.homeDirText) {
-					els.homeDirText.textContent = cfg.home_dir || '/etc/ewsvpnc';
+				if (els.enabledText) {
+					var isEnabled = cfg.enabled === '1';
+					els.enabledText.textContent = isEnabled ? _('Yes') : _('No');
 				}
 			}
 		} catch (err) {
-			self.log('UCI access error: ' + err.message);
+			self.log('Config display update error: ' + err.message);
 		}
 	},
 
@@ -492,21 +505,27 @@ return view.extend({
 	},
 
 	load: function() {
-		this.log('Loading EWS VPN Client Manager...');
-		return Promise.all([
-			uci.load('ewsvpnc'),
-			this.refreshServiceStatus(),
-			fs.read('/etc/ewsvpnc/ewsvpnc.conf').then(function(content) {
-				if (content) {
-					var config = parseConfigFile(content);
-					Object.keys(config).forEach(function(key) {
-						uci.set('ewsvpnc', '@ewsvpnc[0]', key, config[key]);
-					});
-				}
-			}).catch(function(err) {
-				console.log('Failed to read config file:', err);
-			})
-		]);
+		var self = this;
+		self.log('Loading EWS VPN Client Manager...');
+		
+		// Load UCI first, then everything else
+		return uci.load('ewsvpnc').then(function() {
+			self.log('UCI loaded successfully');
+			
+			return Promise.all([
+				self.refreshServiceStatus(),
+				fs.read('/etc/ewsvpnc/ewsvpnc.conf').then(function(content) {
+					if (content) {
+						var config = parseConfigFile(content);
+						// Store config file data separately (not in UCI)
+						self.configFileData = config;
+						self.log('Config file loaded: ' + JSON.stringify(config));
+					}
+				}).catch(function(err) {
+					console.log('Failed to read config file:', err);
+				})
+			]);
+		});
 	},
 
 	render: function() {
@@ -516,11 +535,24 @@ return view.extend({
 		addStyles();
 		
 		var m = new form.Map('ewsvpnc', _('EWS VPN Client Manager'));
+		
+		// Store reference to map for save/reset handlers
+		this.map = m;
 
 		// Create main section with tabs
 		var s = m.section(form.TypedSection, 'ewsvpnc', _('EWS VPN Configuration'));
 		s.anonymous = true;
 		s.addremove = false;
+		
+		// Ensure config file data is available, with fallback
+		if (!self.configFileData) {
+			self.configFileData = {};
+		}
+		
+		// Standard load function - don't modify UCI during load
+		s.load = function() {
+			return form.TypedSection.prototype.load.apply(this, arguments);
+		};
 
 		// Add tabs
 		s.tab('service', _('Service Control'));
@@ -629,111 +661,300 @@ return view.extend({
 		};
 
 		// VPN Configuration Tab
-		var o = s.taboption('config', form.Value, 'home_dir', _('Home Directory'));
-		o.default = '/etc/ewsvpnc';
+		// Get current UCI values to preserve them
+		var sections = uci.sections('ewsvpnc', 'ewsvpnc');
+		var currentUCI = sections && sections.length > 0 ? sections[0] : {};
+		
+		// UCI field for 'enabled' only - normal UCI behavior
+		var o = s.taboption('config', form.Flag, 'enabled', _('Auto Start'));
 		o.rmempty = false;
+		o.default = currentUCI.enabled || '0';
+		
+		// Create UCI section if it doesn't exist
+		if (!currentUCI || Object.keys(currentUCI).length === 0) {
+			var sectionName = uci.add('ewsvpnc', 'ewsvpnc');
+			uci.set('ewsvpnc', sectionName, 'enabled', '0');
+			uci.set('ewsvpnc', sectionName, 'config_file', '/etc/ewsvpnc/ewsvpnc.conf');
+			uci.set('ewsvpnc', sectionName, 'home_dir', '/etc/ewsvpnc');
+			currentUCI = {
+				enabled: '0',
+				config_file: '/etc/ewsvpnc/ewsvpnc.conf',
+				home_dir: '/etc/ewsvpnc'
+			};
+		}
 
-		o = s.taboption('config', form.ListValue, 'client_type', _('Client Type'));
-		o.value('1', _('TLC (Linux Normal)'));
-		o.value('2', _('TLE (Linux Embedded)'));
-		o.default = '2';
+		// Create custom container for config file fields
+		var configFileSection = s.taboption('config', form.DummyValue, '_config_file_fields', '', '');
+		configFileSection.renderWidget = function() {
+			var container = E('div', { 'class': 'cbi-section-node' });
+			
+			// Home Directory
+			var homeDirDiv = E('div', { 'class': 'cbi-value' }, [
+				E('label', { 'class': 'cbi-value-title' }, _('Home Directory')),
+				E('div', { 'class': 'cbi-value-field' }, [
+					E('input', {
+						'type': 'text',
+						'class': 'cbi-input-text',
+						'value': self.configFileData.home_dir || '/etc/ewsvpnc',
+						'data-field': 'home_dir',
+						'change': function(ev) {
+							var oldValue = self.configFileData.home_dir || '/etc/ewsvpnc';
+							var newValue = ev.target.value;
+							if (oldValue !== newValue) {
+								self.configFileData.home_dir = newValue;
+								self.markConfigChanged();
+							}
+						}
+					})
+				])
+			]);
+			
+			// Client Type
+			var clientTypeDiv = E('div', { 'class': 'cbi-value' }, [
+				E('label', { 'class': 'cbi-value-title' }, _('Client Type')),
+				E('div', { 'class': 'cbi-value-field' }, [
+					E('select', {
+						'class': 'cbi-input-select',
+						'data-field': 'client_type',
+						'change': function(ev) {
+							var oldValue = self.configFileData.client_type || '2';
+							var newValue = ev.target.value;
+							if (oldValue !== newValue) {
+								self.configFileData.client_type = newValue;
+								self.markConfigChanged();
+							}
+						}
+					}, [
+						E('option', { 'value': '1' }, _('TLC (Linux Normal)')),
+						E('option', { 'value': '2', 'selected': true }, _('TLE (Linux Embedded)'))
+					])
+				])
+			]);
+			
+			// Server Address
+			var servAddrDiv = E('div', { 'class': 'cbi-value' }, [
+				E('label', { 'class': 'cbi-value-title' }, _('Server Address')),
+				E('div', { 'class': 'cbi-value-field' }, [
+					E('input', {
+						'type': 'text',
+						'class': 'cbi-input-text',
+						'value': self.configFileData.serv_addr || '172.16.130.26',
+						'data-field': 'serv_addr',
+						'change': function(ev) {
+							var oldValue = self.configFileData.serv_addr || '172.16.130.26';
+							var newValue = ev.target.value;
+							if (oldValue !== newValue) {
+								self.configFileData.serv_addr = newValue;
+								self.markConfigChanged();
+							}
+						}
+					})
+				])
+			]);
+			
+			// Server Port
+			var servPortDiv = E('div', { 'class': 'cbi-value' }, [
+				E('label', { 'class': 'cbi-value-title' }, _('Server Port')),
+				E('div', { 'class': 'cbi-value-field' }, [
+					E('input', {
+						'type': 'number',
+						'class': 'cbi-input-text',
+						'value': self.configFileData.serv_port || '443',
+						'data-field': 'serv_port',
+						'change': function(ev) {
+							var oldValue = self.configFileData.serv_port || '443';
+							var newValue = ev.target.value;
+							if (oldValue !== newValue) {
+								self.configFileData.serv_port = newValue;
+								self.markConfigChanged();
+							}
+						}
+					})
+				])
+			]);
+			
+			// User ID
+			var userIdDiv = E('div', { 'class': 'cbi-value' }, [
+				E('label', { 'class': 'cbi-value-title' }, _('User ID')),
+				E('div', { 'class': 'cbi-value-field' }, [
+					E('input', {
+						'type': 'text',
+						'class': 'cbi-input-text',
+						'value': self.configFileData.user_id || 'user01',
+						'data-field': 'user_id',
+						'change': function(ev) {
+							var oldValue = self.configFileData.user_id || 'user01';
+							var newValue = ev.target.value;
+							if (oldValue !== newValue) {
+								self.configFileData.user_id = newValue;
+								self.markConfigChanged();
+							}
+						}
+					})
+				])
+			]);
+			
+			// Password
+			var passwdDiv = E('div', { 'class': 'cbi-value' }, [
+				E('label', { 'class': 'cbi-value-title' }, _('Password')),
+				E('div', { 'class': 'cbi-value-field' }, [
+					E('input', {
+						'type': 'password',
+						'class': 'cbi-input-text',
+						'value': self.configFileData.user_passwd || '',
+						'data-field': 'user_passwd',
+						'change': function(ev) {
+							var oldValue = self.configFileData.user_passwd || '';
+							var newValue = ev.target.value;
+							if (oldValue !== newValue) {
+								self.configFileData.user_passwd = newValue;
+								self.markConfigChanged();
+							}
+						}
+					})
+				])
+			]);
+			
+			// Force Login
+			var forceLoginDiv = E('div', { 'class': 'cbi-value' }, [
+				E('label', { 'class': 'cbi-value-title' }, _('Force Login')),
+				E('div', { 'class': 'cbi-value-field' }, [
+					E('input', {
+						'type': 'checkbox',
+						'class': 'cbi-input-checkbox',
+						'checked': (self.configFileData.force_login === '1'),
+						'data-field': 'force_login',
+						'change': function(ev) {
+							var oldValue = self.configFileData.force_login || '0';
+							var newValue = ev.target.checked ? '1' : '0';
+							if (oldValue !== newValue) {
+								self.configFileData.force_login = newValue;
+								self.markConfigChanged();
+							}
+						}
+					})
+				])
+			]);
+			
+			// Auto Retry
+			var retryLoginDiv = E('div', { 'class': 'cbi-value' }, [
+				E('label', { 'class': 'cbi-value-title' }, _('Auto Retry')),
+				E('div', { 'class': 'cbi-value-field' }, [
+					E('input', {
+						'type': 'checkbox',
+						'class': 'cbi-input-checkbox',
+						'checked': (self.configFileData.retry_login === '1'),
+						'data-field': 'retry_login',
+						'change': function(ev) {
+							var oldValue = self.configFileData.retry_login || '0';
+							var newValue = ev.target.checked ? '1' : '0';
+							if (oldValue !== newValue) {
+								self.configFileData.retry_login = newValue;
+								self.markConfigChanged();
+							}
+						}
+					})
+				])
+			]);
+			
+			// Log Level
+			var logLevelDiv = E('div', { 'class': 'cbi-value' }, [
+				E('label', { 'class': 'cbi-value-title' }, _('Log Level')),
+				E('div', { 'class': 'cbi-value-field' }, [
+					E('select', {
+						'class': 'cbi-input-select',
+						'data-field': 'log_level',
+						'change': function(ev) {
+							var oldValue = self.configFileData.log_level || '4';
+							var newValue = ev.target.value;
+							if (oldValue !== newValue) {
+								self.configFileData.log_level = newValue;
+								self.markConfigChanged();
+							}
+						}
+					}, [
+						E('option', { 'value': '0' }, _('Quiet (0)')),
+						E('option', { 'value': '3' }, _('Error (3)')),
+						E('option', { 'value': '4', 'selected': true }, _('Warning (4)')),
+						E('option', { 'value': '5' }, _('Notice (5)')),
+						E('option', { 'value': '6' }, _('Info (6)')),
+						E('option', { 'value': '7' }, _('Debug (7)'))
+					])
+				])
+			]);
+			
+			container.appendChild(homeDirDiv);
+			container.appendChild(clientTypeDiv);
+			container.appendChild(servAddrDiv);
+			container.appendChild(servPortDiv);
+			container.appendChild(userIdDiv);
+			container.appendChild(passwdDiv);
+			container.appendChild(forceLoginDiv);
+			container.appendChild(retryLoginDiv);
+			container.appendChild(logLevelDiv);
+			
+			// Store reference to update values later
+			self.configFileElements = container;
+			
+			return container;
+		};
 
-		o = s.taboption('config', form.Value, 'serv_addr', _('Server Address'));
-		o.default = '172.16.130.26';
-		o.rmempty = false;
-		o.datatype = 'host';
-
-		o = s.taboption('config', form.Value, 'serv_port', _('Server Port'));
-		o.default = '443';
-		o.rmempty = false;
-		o.datatype = 'port';
-
-		o = s.taboption('config', form.Value, 'user_id', _('User ID'));
-		o.default = 'user01';
-		o.rmempty = false;
-
-		o = s.taboption('config', form.Value, 'user_passwd', _('Password'));
-		o.password = true;
-		o.default = 'userpass123!';
-		o.rmempty = false;
-
-		o = s.taboption('config', form.Flag, 'force_login', _('Force Login'));
-		o.default = '1';
-		o.description = _('Forcefully disconnect existing sessions with same credentials');
-
-		o = s.taboption('config', form.Flag, 'retry_login', _('Auto Retry'));
-		o.default = '0';
-		o.description = _('Automatically retry connection when disconnected');
-
-		o = s.taboption('config', form.Flag, 'enabled', _('Auto Start'));
-		o.default = '0';
-		o.description = _('Automatically start VPN service on boot');
-
-		o = s.taboption('config', form.ListValue, 'log_level', _('Log Level'));
-		o.value('0', _('Quiet (0)'));
-		o.value('3', _('Error (3)'));
-		o.value('4', _('Warning (4)'));
-		o.value('5', _('Notice (5)'));
-		o.value('6', _('Info (6)'));
-		o.value('7', _('Debug (7)'));
-		o.default = '4';
-
-		// Enhanced save handler
+		// Override map save to handle both UCI and config file
 		var originalSave = m.save;
 		m.save = function() {
-			self.log('Saving configuration...');
+			self.log('Saving configurations...');
+			
+			var hasConfigFileChanges = self.configChanged;
+			var hasUCIChanges = this.changed;
+			
+			self.log('Save state - UCI changed: ' + hasUCIChanges + ', Config file changed: ' + hasConfigFileChanges);
+			
+			// Preserve UCI fields before save
+			var sections = uci.sections('ewsvpnc', 'ewsvpnc');
+			var currentUCI = sections && sections.length > 0 ? sections[0] : {};
 			
 			return originalSave.apply(this, arguments).then(function(result) {
-				self.log('Configuration saved successfully');
+				self.log('UCI save completed');
 				
-				// Get current configuration values
-				var sections = uci.sections('ewsvpnc', 'ewsvpnc');
-				if (!sections || sections.length === 0) {
-					throw new Error('No ewsvpnc configuration found');
-				}
-				
-				var cfg = sections[0];
-				var confContent = [
-					'# For more information, refer README.txt!',
-					'',
-					'home_dir=' + (cfg.home_dir || '/etc/ewsvpnc'),
-					'client_type=' + (cfg.client_type || '2'),
-					'#os_name=Linux',
-					'#process_name=svpnc',
-					'#vir_dev_name=tun',
-					'serv_addr=' + (cfg.serv_addr || '172.16.130.26'),
-					'serv_port=' + (cfg.serv_port || '443'),
-					'user_id=' + (cfg.user_id || 'user01'),
-					'user_passwd=' + (cfg.user_passwd || ''),
-					'force_login=' + (cfg.force_login === '1' ? 'yes' : 'no'),
-					'#retry_login=no',
-					'#log_level=4',
-					'#log_size=1048576',
-					'#log_count=4',
-					'#log_rotate_interval=10',
-					''
-				].join('\n');
-
-				// Save to ewsvpnc.conf
-				return fs.write('/etc/ewsvpnc/ewsvpnc.conf', confContent).then(function() {
-					self.log('Configuration saved to ewsvpnc.conf');
-					ui.addNotification(null, E('p', _('Configuration saved successfully')), 'info');
+				// Ensure UCI structure is preserved after save
+				var postSaveSections = uci.sections('ewsvpnc', 'ewsvpnc');
+				if (postSaveSections && postSaveSections.length > 0) {
+					var section = postSaveSections[0];
+					var needsRestore = false;
 					
-					// Update displays
-					self.updateConfigDisplay();
-					
-					// Restart if running to apply new settings
-					if (self.serviceInfo.running) {
-						self.log('Service is running, restarting to apply new configuration...');
-						return self.handleServiceAction('reload');
+					// Restore missing UCI fields if they were deleted
+					if (!section.config_file) {
+						uci.set('ewsvpnc', section['.name'], 'config_file', currentUCI.config_file || '/etc/ewsvpnc/ewsvpnc.conf');
+						needsRestore = true;
+					}
+					if (!section.home_dir) {
+						var homeDirValue = currentUCI.home_dir || self.configFileData.home_dir || '/etc/ewsvpnc';
+						uci.set('ewsvpnc', section['.name'], 'home_dir', homeDirValue);
+						needsRestore = true;
 					}
 					
-					return result;
-				});
+					// If we restored fields, commit the changes
+					if (needsRestore) {
+						self.log('Restored missing UCI fields: config_file=' + (currentUCI.config_file || '/etc/ewsvpnc/ewsvpnc.conf') + ', home_dir=' + (currentUCI.home_dir || self.configFileData.home_dir || '/etc/ewsvpnc'));
+						return uci.save().then(function() {
+							self.log('UCI structure restoration saved');
+							return result;
+						});
+					}
+				}
+				
+				// Save config file only if there are changes
+				if (hasConfigFileChanges) {
+					return self.saveConfigFile().then(function() {
+						self.log('Config file saved');
+						self.configChanged = false;
+						return result;
+					});
+				}
+				
+				return result;
 			}).catch(function(err) {
-				var msg = err.message || err.toString();
-				self.log('Configuration save failed: ' + msg);
-				ui.addNotification(null, E('p', _('Save failed: %s').format(msg)), 'error');
+				self.log('Save failed: ' + err.message);
 				throw err;
 			});
 		};
@@ -769,6 +990,7 @@ return view.extend({
 				self.log('Initializing UI components...');
 				self.updateStatusDisplay();
 				self.updateConfigDisplay();
+				self.updateConfigFileFields(); // Update config file form fields
 				self.log('EWS VPN Client Manager initialized successfully');
 			});
 
@@ -776,27 +998,100 @@ return view.extend({
 		});
 	},
 
-	handleSaveApply: function(ev) {
-		return this.handleSave(ev).then(function() {
-			window.setTimeout(function() {
-				location.reload();
-			}, 500);
+
+	markConfigChanged: function() {
+		this.configChanged = true;
+		this.log('Config file changes detected');
+		
+		// Don't force UCI change detection - let LuCI handle it naturally
+		// Only mark map as changed if there are actual UCI changes
+	},
+
+	updateConfigFileFields: function() {
+		var self = this;
+		if (!self.configFileElements) return;
+		
+		// Update all input values from configFileData
+		var inputs = self.configFileElements.querySelectorAll('input, select');
+		inputs.forEach(function(input) {
+			var field = input.getAttribute('data-field');
+			if (field && self.configFileData[field] !== undefined) {
+				if (input.type === 'checkbox') {
+					input.checked = (self.configFileData[field] === '1');
+				} else if (input.tagName === 'SELECT') {
+					// For select elements, set the selected option
+					var value = self.configFileData[field];
+					for (var i = 0; i < input.options.length; i++) {
+						if (input.options[i].value === value) {
+							input.selectedIndex = i;
+							break;
+						}
+					}
+				} else {
+					input.value = self.configFileData[field];
+				}
+			}
 		});
 	},
 
-	handleSave: function(ev) {
+	saveConfigFile: function() {
+		var self = this;
+		
+		// Use configFileData for config file settings
+		var confContent = [
+			'# For more information, refer README.txt!',
+			'',
+			'home_dir=' + (self.configFileData.home_dir || '/etc/ewsvpnc'),
+			'client_type=' + (self.configFileData.client_type || '2'),
+			'#os_name=Linux',
+			'#process_name=svpnc',
+			'#vir_dev_name=tun',
+			'serv_addr=' + (self.configFileData.serv_addr || '172.16.130.26'),
+			'serv_port=' + (self.configFileData.serv_port || '443'),
+			'user_id=' + (self.configFileData.user_id || 'user01'),
+			'user_passwd=' + (self.configFileData.user_passwd || ''),
+			'force_login=' + (self.configFileData.force_login === '1' ? 'yes' : 'no'),
+			'retry_login=' + (self.configFileData.retry_login === '1' ? 'yes' : 'no'),
+			'log_level=' + (self.configFileData.log_level || '4'),
+			'#log_size=1048576',
+			'#log_count=4',
+			'#log_rotate_interval=10',
+			''
+		].join('\n');
+
+		// Save to ewsvpnc.conf (only config file settings, not 'enabled')
+		return fs.write('/etc/ewsvpnc/ewsvpnc.conf', confContent).then(function() {
+			self.log('Configuration saved to ewsvpnc.conf');
+			
+			// Update displays
+			self.updateConfigDisplay();
+			
+			// Restart if running to apply new settings
+			if (self.serviceInfo.running) {
+				self.log('Service is running, restarting to apply new configuration...');
+				return self.handleServiceAction('reload');
+			}
+		});
+	},
+
+
+	handleSave: function() {
+		var self = this;
+		
+		// First save UCI changes (enabled field and hidden fields)
 		return this.map.save().then(function() {
-			ui.addNotification(null, E('p', _('Configuration has been saved.')), 'info');
+			self.log('UCI configuration saved');
+			
+			// Then save config file if there are changes
+			if (self.configChanged) {
+				return self.saveConfigFile().then(function() {
+					self.configChanged = false;
+					self.log('Config file saved');
+				});
+			}
 		}).catch(function(err) {
-			ui.addNotification(null, E('p', _('Failed to save the configuration: %s').format(err.message)), 'error');
-		});
-	},
-
-	handleReset: function(ev) {
-		return this.map.reset().then(function() {
-			ui.addNotification(null, E('p', _('Configuration has been reset.')), 'info');
-		}).catch(function(err) {
-			ui.addNotification(null, E('p', _('Failed to reset the configuration: %s').format(err.message)), 'error');
+			self.log('Save error: ' + err);
+			throw err;
 		});
 	},
 
