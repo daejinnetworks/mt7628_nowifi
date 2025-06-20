@@ -14,7 +14,7 @@ function addStyles() {
 	var style = document.createElement('style');
 	style.id = 'ewsvpn-styles';
 	style.textContent = `
-/* Tab Styles - 제공된 코드와 동일한 스타일 */
+/* Tab Styles */
 .cbi-tabmenu > li {
   min-width: 120px;
   max-width: 120px;
@@ -247,12 +247,7 @@ return view.extend({
 			E('p', { 'class': 'spinning' }, _('Executing service %s...').format(action))
 		]);
 		
-		self.log('Executing service action: ' + action);
-		
 		return callServiceAction('ewsvpnc', action).then(function(res) {
-			self.log('Service action result: ' + JSON.stringify(res));
-			self.log('Service action result type: ' + typeof res);
-			self.log('Service action result value: ' + res);
 			ui.hideModal();
 			
 			// Check if result is successful
@@ -270,14 +265,10 @@ return view.extend({
 			} else if (typeof res === 'number') {
 				// For other numeric responses, check actual service status to determine success
 				// This handles cases where RPC layer returns unexpected numeric values
-				self.log('Numeric response received, checking actual service status...');
 				// We'll verify success by checking service status after a delay
 			}
 			
-			if (isSuccess) {
-				//ui.addNotification(null, E('p', _('Service %s completed successfully').format(action)), 'info');
-				self.log('Service ' + action + ' successful');
-			} else {
+			if (!isSuccess) {
 				let errorMsg = res?.error || 'Unknown error';
 				
 				// Handle specific error cases
@@ -287,8 +278,6 @@ return view.extend({
 						case 0:
 							// This should be handled as success above, but just in case
 							isSuccess = true;
-							//ui.addNotification(null, E('p', _('Service %s completed successfully').format(action)), 'info');
-							self.log('Service ' + action + ' successful');
 							return;
 						case 1:
 							errorMsg = 'Service executable not found or not executable';
@@ -303,8 +292,6 @@ return view.extend({
 					let exitCode = res.result;
 					if (exitCode === 0) {
 						isSuccess = true;
-						//ui.addNotification(null, E('p', _('Service %s completed successfully').format(action)), 'info');
-						self.log('Service ' + action + ' successful');
 						return;
 					} else {
 						errorMsg = `Service failed with exit code ${exitCode}`;
@@ -318,30 +305,13 @@ return view.extend({
 						E('div', {}, _('Please check system log for more details'))
 					])
 				], 'error');
-				self.log('Service ' + action + ' failed: ' + errorMsg);
 			}
 
 			// Always refresh status after action and determine actual success
 			return new Promise(function(resolve) {
 				setTimeout(function() {
 					self.refreshServiceStatus().then(function(statusRes) {
-						// If we got a numeric response, use actual service status to determine success
-						if (typeof res === 'number' && res !== 0) {
-							let actualSuccess = false;
-							if (action === 'start' && statusRes && statusRes.running) {
-								actualSuccess = true;
-							} else if (action === 'stop' && statusRes && !statusRes.running) {
-								actualSuccess = true;
-							} else if (action === 'reload' && statusRes && statusRes.running) {
-								actualSuccess = true;
-							}
-							
-							if (actualSuccess) {
-								// Override the previous error message with success
-								//ui.addNotification(null, E('p', _('Service %s completed successfully (verified by status check)').format(action)), 'info');
-								self.log('Service ' + action + ' successful (verified by status check)');
-							}
-						}
+						// Service status verification completed
 					}).finally(resolve);
 				}, 2000);
 			});
@@ -352,7 +322,6 @@ return view.extend({
 				E('p', _('Service action error: %s').format(msg)),
 				E('pre', { 'class': 'alert-message' }, _('Please check system log for more details'))
 			], 'error');
-			self.log('Service action error: ' + msg);
 		});
 	},
 
@@ -462,7 +431,6 @@ return view.extend({
 
 	updateConfigDisplay: function() {
 		var self = this;
-		self.log('Updating config display...');
 		try {
 			var els = this.statusElements;
 			
@@ -491,7 +459,7 @@ return view.extend({
 				}
 			}
 		} catch (err) {
-			self.log('Config display update error: ' + err.message);
+			console.error('Config display update error:', err.message);
 		}
 	},
 
@@ -506,12 +474,9 @@ return view.extend({
 
 	load: function() {
 		var self = this;
-		self.log('Loading EWS VPN Client Manager...');
 		
 		// Load UCI first, then everything else
 		return uci.load('ewsvpnc').then(function() {
-			self.log('UCI loaded successfully');
-			
 			return Promise.all([
 				self.refreshServiceStatus(),
 				fs.read('/etc/ewsvpnc/ewsvpnc.conf').then(function(content) {
@@ -519,10 +484,9 @@ return view.extend({
 						var config = parseConfigFile(content);
 						// Store config file data separately (not in UCI)
 						self.configFileData = config;
-						self.log('Config file loaded: ' + JSON.stringify(config));
 					}
 				}).catch(function(err) {
-					console.log('Failed to read config file:', err);
+					console.error('Failed to read config file:', err);
 				})
 			]);
 		});
@@ -795,23 +759,46 @@ return view.extend({
 			]);
 			
 			// Password
+			var passwordInput = E('input', {
+				'type': 'password',
+				'class': 'cbi-input-text',
+				'value': self.configFileData.user_passwd || '',
+				'data-field': 'user_passwd',
+				'style': 'padding-right: 40px;',
+				'change': function(ev) {
+					var oldValue = self.configFileData.user_passwd || '';
+					var newValue = ev.target.value;
+					if (oldValue !== newValue) {
+						self.configFileData.user_passwd = newValue;
+						self.markConfigChanged();
+					}
+				}
+			});
+			
+			var toggleButton = E('button', {
+				'type': 'button',
+				'class': 'cbi-button',
+				'style': 'position: absolute; right: 5px; top: 50%; transform: translateY(-50%); padding: 4px 8px; font-size: 12px; border: none; background: #f0f0f0; cursor: pointer;',
+				'title': _('Toggle password visibility'),
+				'click': function(ev) {
+					ev.preventDefault();
+					if (passwordInput.type === 'password') {
+						passwordInput.type = 'text';
+						this.textContent = '🙈';
+						this.title = _('Hide password');
+					} else {
+						passwordInput.type = 'password';
+						this.textContent = '👁';
+						this.title = _('Show password');
+					}
+				}
+			}, '👁');
+			
 			var passwdDiv = E('div', { 'class': 'cbi-value' }, [
 				E('label', { 'class': 'cbi-value-title' }, _('Password')),
-				E('div', { 'class': 'cbi-value-field' }, [
-					E('input', {
-						'type': 'password',
-						'class': 'cbi-input-text',
-						'value': self.configFileData.user_passwd || '',
-						'data-field': 'user_passwd',
-						'change': function(ev) {
-							var oldValue = self.configFileData.user_passwd || '';
-							var newValue = ev.target.value;
-							if (oldValue !== newValue) {
-								self.configFileData.user_passwd = newValue;
-								self.markConfigChanged();
-							}
-						}
-					})
+				E('div', { 'class': 'cbi-value-field', 'style': 'position: relative;' }, [
+					passwordInput,
+					toggleButton
 				])
 			]);
 			
@@ -902,19 +889,13 @@ return view.extend({
 		// Override map save to handle both UCI and config file
 		var originalSave = m.save;
 		m.save = function() {
-			self.log('Saving configurations...');
-			
 			var hasConfigFileChanges = self.configChanged;
-			var hasUCIChanges = this.changed;
-			
-			self.log('Save state - UCI changed: ' + hasUCIChanges + ', Config file changed: ' + hasConfigFileChanges);
 			
 			// Preserve UCI fields before save
 			var sections = uci.sections('ewsvpnc', 'ewsvpnc');
 			var currentUCI = sections && sections.length > 0 ? sections[0] : {};
 			
 			return originalSave.apply(this, arguments).then(function(result) {
-				self.log('UCI save completed');
 				
 				// Ensure UCI structure is preserved after save
 				var postSaveSections = uci.sections('ewsvpnc', 'ewsvpnc');
@@ -935,9 +916,7 @@ return view.extend({
 					
 					// If we restored fields, commit the changes
 					if (needsRestore) {
-						self.log('Restored missing UCI fields: config_file=' + (currentUCI.config_file || '/etc/ewsvpnc/ewsvpnc.conf') + ', home_dir=' + (currentUCI.home_dir || self.configFileData.home_dir || '/etc/ewsvpnc'));
 						return uci.save().then(function() {
-							self.log('UCI structure restoration saved');
 							return result;
 						});
 					}
@@ -946,7 +925,6 @@ return view.extend({
 				// Save config file only if there are changes
 				if (hasConfigFileChanges) {
 					return self.saveConfigFile().then(function() {
-						self.log('Config file saved');
 						self.configChanged = false;
 						return result;
 					});
@@ -954,7 +932,7 @@ return view.extend({
 				
 				return result;
 			}).catch(function(err) {
-				self.log('Save failed: ' + err.message);
+				console.error('Save failed:', err.message);
 				throw err;
 			});
 		};
@@ -987,11 +965,9 @@ return view.extend({
 
 			// Initial update after render
 			requestAnimationFrame(function() {
-				self.log('Initializing UI components...');
 				self.updateStatusDisplay();
 				self.updateConfigDisplay();
 				self.updateConfigFileFields(); // Update config file form fields
-				self.log('EWS VPN Client Manager initialized successfully');
 			});
 
 			return mapEl;
@@ -1001,10 +977,19 @@ return view.extend({
 
 	markConfigChanged: function() {
 		this.configChanged = true;
-		this.log('Config file changes detected');
 		
-		// Don't force UCI change detection - let LuCI handle it naturally
-		// Only mark map as changed if there are actual UCI changes
+		// Force UCI change detection by setting a timestamp field in UCI
+		var sections = uci.sections('ewsvpnc', 'ewsvpnc');
+		if (sections && sections.length > 0) {
+			var section = sections[0];
+			// Set a timestamp to force change detection in UCI
+			uci.set('ewsvpnc', section['.name'], '_last_config_change', Date.now().toString());
+		}
+		
+		// Also set map changed flag
+		if (this.map) {
+			this.map.changed = true;
+		}
 	},
 
 	updateConfigFileFields: function() {
@@ -1015,20 +1000,23 @@ return view.extend({
 		var inputs = self.configFileElements.querySelectorAll('input, select');
 		inputs.forEach(function(input) {
 			var field = input.getAttribute('data-field');
-			if (field && self.configFileData[field] !== undefined) {
+			if (field) {
 				if (input.type === 'checkbox') {
+					// For checkboxes, always set the state (false if undefined)
 					input.checked = (self.configFileData[field] === '1');
-				} else if (input.tagName === 'SELECT') {
-					// For select elements, set the selected option
-					var value = self.configFileData[field];
-					for (var i = 0; i < input.options.length; i++) {
-						if (input.options[i].value === value) {
-							input.selectedIndex = i;
-							break;
+				} else if (self.configFileData[field] !== undefined) {
+					if (input.tagName === 'SELECT') {
+						// For select elements, set the selected option
+						var value = self.configFileData[field];
+						for (var i = 0; i < input.options.length; i++) {
+							if (input.options[i].value === value) {
+								input.selectedIndex = i;
+								break;
+							}
 						}
+					} else {
+						input.value = self.configFileData[field];
 					}
-				} else {
-					input.value = self.configFileData[field];
 				}
 			}
 		});
@@ -1061,14 +1049,11 @@ return view.extend({
 
 		// Save to ewsvpnc.conf (only config file settings, not 'enabled')
 		return fs.write('/etc/ewsvpnc/ewsvpnc.conf', confContent).then(function() {
-			self.log('Configuration saved to ewsvpnc.conf');
-			
 			// Update displays
 			self.updateConfigDisplay();
 			
 			// Restart if running to apply new settings
 			if (self.serviceInfo.running) {
-				self.log('Service is running, restarting to apply new configuration...');
 				return self.handleServiceAction('reload');
 			}
 		});
@@ -1080,27 +1065,22 @@ return view.extend({
 		
 		// First save UCI changes (enabled field and hidden fields)
 		return this.map.save().then(function() {
-			self.log('UCI configuration saved');
-			
 			// Then save config file if there are changes
 			if (self.configChanged) {
 				return self.saveConfigFile().then(function() {
 					self.configChanged = false;
-					self.log('Config file saved');
 				});
 			}
 		}).catch(function(err) {
-			self.log('Save error: ' + err);
+			console.error('Save error:', err);
 			throw err;
 		});
 	},
 
 	destroy: function() {
-		this.log('Destroying EWS VPN Client Manager view...');
 		if (this.pollFn) {
 			poll.remove(this.pollFn);
 			this.pollFn = null;
-			this.log('Status polling stopped');
 		}
 	}
 });
