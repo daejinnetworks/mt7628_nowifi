@@ -24,7 +24,7 @@
 				"file": [ "list" ],
 				"uci": [ "changes", "get" ],
 				"system": [ "watchdog" ],
-				"luci": [ "getUserID" ],
+				"luci": [ ],
 				"session": [ "get" ]
 			}
 		},
@@ -38,7 +38,7 @@
 				"file": [ "remove" ],
 				"uci": [ "add", "apply", "confirm", "delete", "order", "rename", "set" ],
 				"system": [ "watchdog" ],
-				"luci": [ "getUserID" ]
+				"luci": [ ]
 			}
 		}
 	},

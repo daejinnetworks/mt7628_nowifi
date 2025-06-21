@@ -604,25 +604,6 @@ const methods = {
 			};
 		}
 	},
-	
-	getUserID: {
-		args: { sessionid: 'string' },
-		call: function(request) {
-			let username = null;
-			let session = null;
-			if (request.args.sessionid) {
-				session = ubus.call('session', 'get', { ubus_rpc_session: request.args.sessionid });
-				if (session && session.values && session.values.username) {
-					username = session.values.username;
-				}
-			}
-			if (username) {
-				return { username: username };
-			} else {
-				return { error: 'No user found in session' };
-			}
-		}
-	},
 
 	getNetDeviceStatus: {
 		args: { device: 'string' },

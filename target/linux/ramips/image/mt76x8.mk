@@ -210,7 +210,7 @@ TARGET_DEVICES += vpn_mt7628nn-2p
 
 define Device/ui_mt7628nn-2pv
   UIMAGE_NAME := UI-2PV
-  IMAGE_SIZE := 12288k
+  IMAGE_SIZE := 13248k
   DEVICE_VENDOR := UI
   DEVICE_MODEL := UI-2PV
 endef
