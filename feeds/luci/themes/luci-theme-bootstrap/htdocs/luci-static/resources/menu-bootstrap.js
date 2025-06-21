@@ -89,13 +89,7 @@ return baseclass.extend({
 					linkChildren.push('🖥️ ');
 				}
 				if (childrenCopy[i].name === 'vpn') {
-					linkChildren.push(
-						E('img', {
-							src: '/luci-static/bootstrap/vpn_custom.png',
-							alt: 'vpn',
-							style: 'height:18px;width:auto;margin-right:6px;vertical-align:middle;'
-						})
-					);
+					linkChildren.push('🔐 ');
 				}
 				if (childrenCopy[i].name === 'firewall') {
 					linkChildren.push('🛡️ ');
@@ -127,12 +121,46 @@ return baseclass.extend({
 
 				var linkChildren = [];
 				linkChildren.push('👤 ');
-				linkChildren.push(_(adminItem.title));
+				linkChildren.push(_(adminItem.title)); // Default title first
+
+				// Create the link element
+				var adminLink = E('a', { 'class': linkclass, 'href': linkurl }, linkChildren);
 
 				var li = E('li', { 'class': subclass }, [
-					E('a', { 'class': linkclass, 'href': linkurl }, linkChildren),
+					adminLink,
 					submenu
 				]);
+
+				// Get username from session via ubus call and update the link directly
+				if (L.env.sessionid) {
+					var rpcData = {
+						'jsonrpc': '2.0',
+						'id': 1,
+						'method': 'call',
+						'params': [L.env.sessionid, 'session', 'get', {}]
+					};
+
+					fetch('/ubus', {
+						method: 'POST',
+						headers: {
+							'Content-Type': 'application/json',
+						},
+						body: JSON.stringify(rpcData)
+					}).then(function(response) {
+						return response.json();
+					}).then(function(data) {
+						if (data.result && data.result[1] && data.result[1].values) {
+							var username = data.result[1].values.username || _(adminItem.title);
+
+							// Update the link element directly
+							adminLink.innerHTML = '';
+							adminLink.appendChild(document.createTextNode('👤 ' + username));
+						}
+					}).catch(function(error) {
+						// Keep default title on error
+						console.log('Failed to get username:', error);
+					});
+				}
 				ul.appendChild(li);
 			}
 
