@@ -15,7 +15,7 @@ init_switch() {
 init_tun0() {
 	if /sbin/lsmod | /bin/grep -q tun; then
 		/sbin/ip tuntap add mode tun dev tun0
-		echo "tun0 interface creation completed"
+		echo "tun0 interface creation completed" > /dev/kmsg
 	fi
 }
 
