@@ -12,8 +12,16 @@ init_switch() {
 	setup_switch
 }
 
+init_tun0() {
+	if /sbin/lsmod | /bin/grep -q tun; then
+		/sbin/ip tuntap add mode tun dev tun0
+		echo "tun0 interface creation completed"
+	fi
+}
+
 start_service() {
 	init_switch
+	init_tun0
 
 	procd_open_instance
 	procd_set_param command /sbin/netifd

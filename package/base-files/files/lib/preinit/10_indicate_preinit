@@ -131,7 +131,8 @@ preinit_config_board() {
 	done
 
 	json_select network
-		json_select "lan"
+		# ui-2pv system interface change lan to VPN
+		json_select "VPN"
 			json_get_vars device
 			json_get_values ports ports
 		json_select ..
