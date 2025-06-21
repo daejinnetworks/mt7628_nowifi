@@ -14,6 +14,41 @@ function addStyles() {
 	var style = document.createElement('style');
 	style.id = 'ewsvpn-styles';
 	style.textContent = `
+/* Version Info Styles */
+.ewsvpn-version-info {
+    margin: 0 40px 20px 40px;
+}
+.ewsvpn-version-info p {
+    margin: 0;
+    padding: 15px 20px;
+    background: #f8f9fa;
+    border-radius: 8px;
+    border-left: 4px solid #17a2b8;
+    font-family: monospace;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    position: relative;
+    overflow: hidden;
+}
+.ewsvpn-version-info p::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(45deg, transparent 98%, #17a2b8 100%);
+    opacity: 0.1;
+}
+.ewsvpn-version-info span {
+    display: block;
+    line-height: 1.5;
+    color: #495057;
+}
+.ewsvpn-version-info span:first-child {
+    color: #17a2b8;
+    font-weight: bold;
+}
+
 /* Tab Styles */
 .cbi-tabmenu > li {
   min-width: 120px;
@@ -166,6 +201,11 @@ var callServiceAction = rpc.declare({
 var callServiceStatus = rpc.declare({
 	object: 'luci',
 	method: 'getVPNStatus'
+});
+
+var callVPNVersion = rpc.declare({
+	object: 'luci',
+	method: 'getVPNVersion'
 });
 
 var callSystemCommand = rpc.declare({
@@ -525,6 +565,26 @@ return view.extend({
 		// Service Control Tab
 		var serviceControlOption = s.taboption('service', form.DummyValue, '_service_control', '', '');
 		serviceControlOption.renderWidget = function() {
+			var versionInfo = E('div', { 'class': 'ewsvpn-version-info' }, [
+				E('p', {}, [
+					E('span', {}, ''),  // Version info will be filled dynamically
+					E('br'),
+					E('span', {}, '')   // API version will be filled dynamically
+				])
+			]);
+
+			// Get version information
+			callVPNVersion().then(function(res) {
+				if (res.version && res.api_version) {
+					versionInfo.querySelector('span:first-child').textContent = 
+						`eWalker SSL VPN v10 Client for Linux (v${res.version})`;
+					versionInfo.querySelector('span:last-child').textContent = 
+						`API Version: ${res.api_version}`;
+				}
+			}).catch(function(err) {
+				console.log('Failed to get VPN version, using default version:', err);
+			});
+
 			var statusDiv = E('div', { 'class': 'ewsvpn-status' }, [
 				E('div', { 'class': 'ewsvpn-status-dot' }),
 				E('span', {}, _('Checking service status...'))
@@ -618,6 +678,7 @@ return view.extend({
 			}
 
 			return E('div', { 'style': 'padding: 16px 0;' }, [
+				versionInfo,
 				statusDiv,
 				btnDiv,
 				infoDiv

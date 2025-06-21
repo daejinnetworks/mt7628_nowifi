@@ -792,6 +792,45 @@ const methods = {
 
 			return result;
 		}
+	},
+
+	// Add VPN version information method
+	getVPNVersion: {
+		call: function() {
+			let result = {
+				version: '1.0.0.0',      // Default version
+				api_version: '1.0.7',    // Default API version
+				error: null
+			};
+
+			// Check if VPN client exists
+			if (system('test -x /usr/sbin/ewsvpnc') != 0) {
+				result.error = 'VPN client not installed';
+				return result;
+			}
+
+			// Get version information
+			const ver = popen('/usr/sbin/ewsvpnc -V', 'r');
+			if (ver) {
+				const output = ver.read('all');
+				ver.close();
+
+				// Parse version information
+				const version_match = match(output, /eWalker SSL VPN v10 Client for Linux \(v([^)]+)\)/);
+				const api_match = match(output, /API Version: ([0-9.]+)/);
+
+				if (version_match && version_match[1]) {
+					result.version = version_match[1];
+				}
+				if (api_match && api_match[1]) {
+					result.api_version = api_match[1];
+				}
+			} else {
+				result.error = 'Failed to get version information';
+			}
+
+			return result;
+		}
 	}
 
 };

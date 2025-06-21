@@ -15,7 +15,7 @@
 				"file": [ "exec", "read", "stat" ],
 				"service": [ "list", "get_data" ],
 				"system": [ "info", "board" ],
-				"luci": [ "getInitList", "setInitAction", "getConntrackList", "getVPNStatus" ]
+				"luci": [ "getInitList", "setInitAction", "getConntrackList", "getVPNStatus", "getVPNVersion" ]
 			},
 			"uci": [ "ewsvpnc" ]
 		},
@@ -27,12 +27,15 @@
 				"/bin/ps": [ "exec" ],
 				"/usr/bin/pgrep": [ "exec" ],
 				"/usr/bin/killall": [ "exec" ],
-				"/tmp/ewsvpnc.tmp": [ "write", "unlink" ]
+				"/tmp/ewsvpnc.tmp": [ "write", "unlink" ],
+				"/sbin/uci": [ "exec" ],
+				"/bin/uci": [ "exec" ]
 			},
 			"ubus": {
 				"file": [ "exec", "write", "remove" ],
 				"service": [ "list", "set_data" ],
-				"luci": [ "setInitAction", "getVPNStatus" ]
+				"luci": [ "setInitAction", "getVPNStatus", "getVPNVersion" ],
+				"uci": [ "apply", "commit", "changes", "add", "set", "delete", "get", "show" ]
 			},
 			"uci": [ "ewsvpnc" ]
 		}
