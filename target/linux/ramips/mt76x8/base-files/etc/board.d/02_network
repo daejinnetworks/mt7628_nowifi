@@ -358,6 +358,7 @@ ramips_setup_macs()
 	[ -n "$label_mac" ] && ucidef_set_label_macaddr $label_mac
 	[ -n "$VPN_mac" ] && ucidef_set_interface_macaddr "VPN" $VPN_mac
 	[ -n "$LAN_mac" ] && ucidef_set_interface_macaddr "LAN" $LAN_mac
+	[ -n "$VPN_mac" ] && ucidef_set_interface "ewsvpn" device "tun0" protocol "none"
 }
 
 board_config_update
