@@ -1,0 +1,1 @@
+0 * * * * /usr/sbin/ntpd -q -p kr.pool.ntp.org

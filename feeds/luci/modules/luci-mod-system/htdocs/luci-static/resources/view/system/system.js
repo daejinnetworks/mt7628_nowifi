@@ -111,9 +111,23 @@ CBILocalTime = form.DummyValue.extend({
 			if (mode === 'ntp') {
 				var rows = makeTimeRows('Current Time', current.date, current.time);
 				rows.forEach(function(r) { newTimeRow.appendChild(r); });
+				
+				// NTP 모드시 관련 요소들 활성화
+				periodSelect.disabled = false;
+				ntpInput.disabled = false;
+				localSelect.disabled = false;
+				localInput.disabled = false;
+				autoCheckbox.disabled = false;
 			} else {
 				newTimeRow.appendChild(row('New Time', dateInput));
 				newTimeRow.appendChild(row(' ', timeInput));
+				
+				// 수동 모드시 NTP 관련 요소들 비활성화
+				periodSelect.disabled = true;
+				ntpInput.disabled = true;
+				localSelect.disabled = true;
+				localInput.disabled = true;
+				autoCheckbox.disabled = true;
 			}
 			updateLocalAddrUI();
 		}
@@ -128,9 +142,9 @@ CBILocalTime = form.DummyValue.extend({
 		dateText = E('div', { 'id': 'localtime', 'style': 'width:140px; margin-bottom:6px;' });
 		timeText = E('div', { 'style': 'width:140px;' });
 		periodSelect = E('select', { 'style': 'width:140px;' }, [
-			E('option', { 'value': 'day' }, '하루'),
-			E('option', { 'value': 'hour' }, '1시간'),
-			E('option', { 'value': 'minute' }, '1분')
+			E('option', { 'value': '60' }, '1분'),
+			E('option', { 'value': '3600' }, '1시간'),
+			E('option', { 'value': '86400' }, '하루')
 		]);
 		ntpInput = E('input', { 'type': 'text', 'style': 'width:140px;' });
 		localSelect = E('select', { 'style': 'width:140px;', 'disabled': true }, [
@@ -143,7 +157,7 @@ CBILocalTime = form.DummyValue.extend({
 		autoCheckbox = E('input', { 'type': 'checkbox', 'checked': true, 'style': 'margin-left:8px;' });
 
 		// Read current NTP setting from /etc/config/system
-		var ntpEnabled = uci.get('system', 'timeserver', 'enabled');
+		var ntpEnabled = uci.get('system', 'ntp', 'enabled');
 		if (ntpEnabled === '1') {
 			modeSelect.value = 'ntp';
 		} else {
@@ -154,12 +168,30 @@ CBILocalTime = form.DummyValue.extend({
 		modeSelect.addEventListener('change', function() {
 			var value = this.value;
 			if (value === 'ntp') {
-				uci.set('system', 'timeserver', 'enabled', '1');
+				uci.set('system', 'ntp', 'enabled', '1');
+				// 수동 설정 기록 제거
+				uci.unset('system', 'ntp', 'manual_time_set');
+				uci.unset('system', 'ntp', 'manual_time_timestamp');
+				uci.unset('system', 'ntp', 'manual_time_date');
+				// NTP 활성화시 설정 적용
+				saveNtpSettings();
 			} else {
-				uci.set('system', 'timeserver', 'enabled', '0');
+				uci.set('system', 'ntp', 'enabled', '0');
+				// 수동 모드시 cron 작업 제거
+				uci.unset('system', 'ntp', 'cron_entry');
+				
+				// /etc/crontabs/root에서 NTP cron 작업 제거
+				L.resolveDefault(L.rpc.declare({
+					object: 'file',
+					method: 'exec',
+					params: ['command']
+				})('grep -v "ntpd.*-q.*-p" /etc/crontabs/root 2>/dev/null > /tmp/crontab.tmp || true && mv /tmp/crontab.tmp /etc/crontabs/root')).then(function() {
+					return callRcInit('cron', 'restart');
+				});
+				
+				uci.save();
+				uci.apply();
 			}
-			uci.save();
-			uci.apply();
 		});
 
 		// 수동설정 시 시간 적용 함수
@@ -171,6 +203,12 @@ CBILocalTime = form.DummyValue.extend({
 					var dateTimeStr = dateVal + 'T' + timeVal;
 					var epoch = Math.floor(new Date(dateTimeStr).getTime() / 1000);
 					callSetLocaltime(epoch);
+					
+					// UCI에 수동 설정 완료 기록
+					uci.set('system', 'ntp', 'enabled', '0');
+					uci.set('system', 'ntp', 'manual_time_set', '1');
+					uci.set('system', 'ntp', 'manual_time_timestamp', epoch.toString());
+					uci.set('system', 'ntp', 'manual_time_date', dateTimeStr);
 				}
 			}
 		}
@@ -181,18 +219,77 @@ CBILocalTime = form.DummyValue.extend({
 		}
 
 		// --- NTP 서버 주소 불러오기 ---
-		var ntpServers = uci.get('system', 'timeserver', 'server');
+		var ntpServers = uci.get('system', 'ntp', 'server');
 		if (ntpServers && ntpServers.length > 0) {
 			ntpInput.value = ntpServers[0];
 		} else {
 			ntpInput.value = 'kr.pool.ntp.org';
 		}
 
+		// --- 적용주기 불러오기 ---
+		var updateInterval = uci.get('system', 'ntp', 'update_interval');
+		if (updateInterval) {
+			periodSelect.value = updateInterval;
+		} else {
+			periodSelect.value = '3600'; // 기본값: 1시간
+		}
+
+		// 초기 로드시 NTP가 활성화되어 있으면 cron 설정
+		if (ntpEnabled === '1') {
+			saveNtpSettings();
+		}
+
+		// NTP 서버 주소와 적용주기 저장 (cron 방식)
+		function saveNtpSettings() {
+			if (modeSelect.value === 'ntp') {
+				var ntpAddress = ntpInput.value || 'kr.pool.ntp.org';
+				var period = periodSelect.value || '3600';
+				
+				// 현재 설정 확인
+				var currentServers = uci.get('system', 'ntp', 'server') || [];
+				var currentPeriod = uci.get('system', 'ntp', 'update_interval') || '3600';
+				var currentServer = currentServers.length > 0 ? currentServers[0] : 'kr.pool.ntp.org';
+				
+				// 변경된 경우에만 업데이트
+				if (currentServer !== ntpAddress || currentPeriod !== period) {
+					// UCI 설정 저장
+					uci.set('system', 'ntp', 'server', [ntpAddress]);
+					uci.set('system', 'ntp', 'update_interval', period);
+					
+					// cron 작업 생성 및 파일에 저장
+					var cronEntry = '';
+					if (period === '60') { // 1분
+						cronEntry = '* * * * * /usr/sbin/ntpd -q -p ' + ntpAddress;
+					} else if (period === '3600') { // 1시간  
+						cronEntry = '0 * * * * /usr/sbin/ntpd -q -p ' + ntpAddress;
+					} else if (period === '86400') { // 하루
+						cronEntry = '0 0 * * * /usr/sbin/ntpd -q -p ' + ntpAddress;
+					}
+					
+					if (cronEntry) {
+						// UCI에 저장
+						uci.set('system', 'ntp', 'cron_entry', cronEntry);
+						
+						// /etc/crontabs/root 파일에 NTP cron 작업 추가/업데이트
+						L.resolveDefault(L.rpc.declare({
+							object: 'file',
+							method: 'write',
+							params: ['path', 'data']
+						})('/etc/crontabs/root', cronEntry + '\n')).then(function() {
+							// cron 서비스 재시작
+							return callRcInit('cron', 'restart');
+						});
+					}
+				}
+			}
+		}
+
 		// 입력폼 값이 바뀔 때마다 UI를 즉시 갱신
 		modeSelect.addEventListener('change', updateUI);
 		dateInput.addEventListener('input', updateUI);
 		timeInput.addEventListener('input', updateUI);
-		ntpInput.addEventListener('input', updateUI);
+		ntpInput.addEventListener('change', saveNtpSettings);
+		periodSelect.addEventListener('change', saveNtpSettings);
 
 		// 자동 체크박스 이벤트
 		function updateLocalAddrUI() {
@@ -317,9 +414,23 @@ return view.extend({
 				if (mode === 'ntp') {
 					var rows = makeTimeRows('Current Time', current.date, current.time);
 					rows.forEach(function(r) { newTimeRow.appendChild(r); });
+					
+					// NTP 모드시 관련 요소들 활성화
+					periodSelect.disabled = false;
+					ntpInput.disabled = false;
+					localSelect.disabled = false;
+					localInput.disabled = false;
+					autoCheckbox.disabled = false;
 				} else {
 					newTimeRow.appendChild(row('New Time', dateInput));
 					newTimeRow.appendChild(row(' ', timeInput));
+					
+					// 수동 모드시 NTP 관련 요소들 비활성화
+					periodSelect.disabled = true;
+					ntpInput.disabled = true;
+					localSelect.disabled = true;
+					localInput.disabled = true;
+					autoCheckbox.disabled = true;
 				}
 				updateLocalAddrUI();
 			}
@@ -334,9 +445,9 @@ return view.extend({
 			dateText = E('div', { 'id': 'localtime', 'style': 'width:140px; margin-bottom:6px;' });
 			timeText = E('div', { 'style': 'width:140px;' });
 			periodSelect = E('select', { 'style': 'width:140px;' }, [
-				E('option', { 'value': 'day' }, '하루'),
-				E('option', { 'value': 'hour' }, '1시간'),
-				E('option', { 'value': 'minute' }, '1분')
+				E('option', { 'value': '60' }, '1분'),
+				E('option', { 'value': '3600' }, '1시간'),
+				E('option', { 'value': '86400' }, '하루')
 			]);
 			ntpInput = E('input', { 'type': 'text', 'style': 'width:140px;' });
 			localSelect = E('select', { 'style': 'width:140px;', 'disabled': true }, [
@@ -344,6 +455,70 @@ return view.extend({
 			]);
 			localInput = E('input', { 'type': 'text', 'style': 'width:140px; display:none;' });
 			autoCheckbox = E('input', { 'type': 'checkbox', 'checked': true, 'style': 'margin-left:8px;' });
+
+			// Read current NTP setting from /etc/config/system
+			var ntpEnabled = uci.get('system', 'ntp', 'enabled');
+			if (ntpEnabled === '1') {
+				modeSelect.value = 'ntp';
+			} else {
+				modeSelect.value = 'manual';
+			}
+
+			// Add save functionality
+			modeSelect.addEventListener('change', function() {
+				var value = this.value;
+				if (value === 'ntp') {
+					uci.set('system', 'ntp', 'enabled', '1');
+					// 수동 설정 기록 제거
+					uci.unset('system', 'ntp', 'manual_time_set');
+					uci.unset('system', 'ntp', 'manual_time_timestamp');
+					uci.unset('system', 'ntp', 'manual_time_date');
+					// NTP 활성화시 설정 적용
+					saveNtpSettings();
+				} else {
+					uci.set('system', 'ntp', 'enabled', '0');
+					// 수동 모드시 cron 작업 제거
+					uci.unset('system', 'ntp', 'cron_entry');
+					
+					// /etc/crontabs/root에서 NTP cron 작업 제거
+					L.resolveDefault(L.rpc.declare({
+						object: 'file',
+						method: 'exec',
+						params: ['command']
+					})('grep -v "ntpd.*-q.*-p" /etc/crontabs/root 2>/dev/null > /tmp/crontab.tmp || true && mv /tmp/crontab.tmp /etc/crontabs/root')).then(function() {
+						return callRcInit('cron', 'restart');
+					});
+					
+					uci.save();
+					uci.apply();
+				}
+			});
+
+			// 수동설정 시 시간 적용 함수
+			function setManualTime() {
+				if (modeSelect.value === 'manual') {
+					var dateVal = dateInput.value;
+					var timeVal = timeInput.value;
+					if (dateVal && timeVal) {
+						var dateTimeStr = dateVal + 'T' + timeVal;
+						var epoch = Math.floor(new Date(dateTimeStr).getTime() / 1000);
+						
+						// 시스템 시간 설정
+						callSetLocaltime(epoch);
+						
+						// UCI에 수동 설정 완료 기록
+						uci.set('system', 'ntp', 'enabled', '0');
+						uci.set('system', 'ntp', 'manual_time_set', '1');
+						uci.set('system', 'ntp', 'manual_time_timestamp', epoch.toString());
+						uci.set('system', 'ntp', 'manual_time_date', dateTimeStr);
+					}
+				}
+			}
+
+			// 저장&적용 버튼에 수동 시간 적용 연결 (폼 저장 시)
+			if (window.L && L.ui && L.ui.addSaveHook) {
+				L.ui.addSaveHook(setManualTime);
+			}
 
 			// --- NTP 서버 주소 불러오기 ---
 			var ntpServers = uci.get('system', 'ntp', 'server');
@@ -353,11 +528,70 @@ return view.extend({
 				ntpInput.value = 'kr.pool.ntp.org';
 			}
 
+			// --- 적용주기 불러오기 ---
+			var updateInterval = uci.get('system', 'ntp', 'update_interval');
+			if (updateInterval) {
+				periodSelect.value = updateInterval;
+			} else {
+				periodSelect.value = '3600'; // 기본값: 1시간
+			}
+
+			// 초기 로드시 NTP가 활성화되어 있으면 cron 설정
+			if (ntpEnabled === '1') {
+				saveNtpSettings();
+			}
+
+			// NTP 서버 주소와 적용주기 저장 (cron 방식)
+			function saveNtpSettings() {
+				if (modeSelect.value === 'ntp') {
+					var ntpAddress = ntpInput.value || 'kr.pool.ntp.org';
+					var period = periodSelect.value || '3600';
+					
+					// 현재 설정 확인
+					var currentServers = uci.get('system', 'ntp', 'server') || [];
+					var currentPeriod = uci.get('system', 'ntp', 'update_interval') || '3600';
+					var currentServer = currentServers.length > 0 ? currentServers[0] : 'kr.pool.ntp.org';
+					
+					// 변경된 경우에만 업데이트
+					if (currentServer !== ntpAddress || currentPeriod !== period) {
+						// UCI 설정 저장
+						uci.set('system', 'ntp', 'server', [ntpAddress]);
+						uci.set('system', 'ntp', 'update_interval', period);
+						
+						// cron 작업 생성 및 파일에 저장
+						var cronEntry = '';
+						if (period === '60') { // 1분
+							cronEntry = '* * * * * /usr/sbin/ntpd -q -p ' + ntpAddress;
+						} else if (period === '3600') { // 1시간  
+							cronEntry = '0 * * * * /usr/sbin/ntpd -q -p ' + ntpAddress;
+						} else if (period === '86400') { // 하루
+							cronEntry = '0 0 * * * /usr/sbin/ntpd -q -p ' + ntpAddress;
+						}
+						
+						if (cronEntry) {
+							// UCI에 저장
+							uci.set('system', 'ntp', 'cron_entry', cronEntry);
+							
+							// /etc/crontabs/root 파일에 NTP cron 작업 추가/업데이트
+							L.resolveDefault(L.rpc.declare({
+								object: 'file',
+								method: 'write',
+								params: ['path', 'data']
+							})('/etc/crontabs/root', cronEntry + '\n')).then(function() {
+								// cron 서비스 재시작
+								return callRcInit('cron', 'restart');
+							});
+						}
+					}
+				}
+			}
+
 			// 입력폼 값이 바뀔 때마다 UI를 즉시 갱신
 			modeSelect.addEventListener('change', updateUI);
 			dateInput.addEventListener('input', updateUI);
 			timeInput.addEventListener('input', updateUI);
-			ntpInput.addEventListener('input', updateUI);
+			ntpInput.addEventListener('change', saveNtpSettings);
+			periodSelect.addEventListener('change', saveNtpSettings);
 
 			// 자동 체크박스 이벤트
 			function updateLocalAddrUI() {
@@ -502,23 +736,27 @@ return view.extend({
 			mapEl.insertBefore(tabStyle, mapEl.firstChild);
 			poll.add(function() {
 				return callGetLocaltime().then(function(t) {
-					var fields = newTimeRow.querySelectorAll('.cbi-value-field');
-					if (fields.length === 2) {
-						var date = new Date(t * 1000);
-						var dateStr = '%04d-%02d-%02d'.format(
-							date.getUTCFullYear(),
-							date.getUTCMonth() + 1,
-							date.getUTCDate()
-						);
-						var timeStr = '%02d:%02d:%02d'.format(
-							date.getUTCHours(),
-							date.getUTCMinutes(),
-							date.getUTCSeconds()
-						);
-						fields[0].innerHTML = '';
-						fields[0].appendChild(E('div', {}, dateStr));
-						fields[1].innerHTML = '';
-						fields[1].appendChild(E('div', {}, timeStr));
+					// NTP 모드일 때만 실시간 업데이트
+					var modeSelect = mapEl.querySelector('select');
+					if (modeSelect && modeSelect.value === 'ntp') {
+						var fields = newTimeRow.querySelectorAll('.cbi-value-field');
+						if (fields.length === 2) {
+							var date = new Date(t * 1000);
+							var dateStr = '%04d-%02d-%02d'.format(
+								date.getUTCFullYear(),
+								date.getUTCMonth() + 1,
+								date.getUTCDate()
+							);
+							var timeStr = '%02d:%02d:%02d'.format(
+								date.getUTCHours(),
+								date.getUTCMinutes(),
+								date.getUTCSeconds()
+							);
+							fields[0].innerHTML = '';
+							fields[0].appendChild(E('div', {}, dateStr));
+							fields[1].innerHTML = '';
+							fields[1].appendChild(E('div', {}, timeStr));
+						}
 					}
 				});
 			});

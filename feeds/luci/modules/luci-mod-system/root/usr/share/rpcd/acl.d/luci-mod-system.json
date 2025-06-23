@@ -7,14 +7,20 @@
 				"rc": [ "list" ],
 				"system": [ "info" ]
 			},
-			"uci": [ "luci", "system" ]
+			"uci": [ "luci", "system", "chrony" ]
 		},
 		"write": {
+			"file": {
+				"/etc/crontabs/root": [ "write" ],
+				"/bin/sh": [ "exec" ]
+			},
 			"ubus": {
 				"luci": [ "setLocaltime", "setPassword" ],
-				"rc": [ "init" ]
+				"rc": [ "init" ],
+				"file": [ "write", "exec" ],
+				"init": [ "restart" ]
 			},
-			"uci": [ "luci", "system" ]
+			"uci": [ "luci", "system", "chrony" ]
 		}
 	},
 

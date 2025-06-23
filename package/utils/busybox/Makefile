@@ -149,6 +149,7 @@ endif
 ifneq ($(CONFIG_BUSYBOX_$(BUSYBOX_SYM)_CROND),)
 	$(INSTALL_BIN) ./files/cron $(1)/etc/init.d/cron
 	$(INSTALL_DIR) $(1)/etc/crontabs
+	$(INSTALL_DATA) ./files/root.crontab $(1)/etc/crontabs/root
 endif
 ifneq ($(CONFIG_BUSYBOX_$(BUSYBOX_SYM)_NTPD),)
 	$(INSTALL_BIN) ./files/sysntpd $(1)/etc/init.d/sysntpd
