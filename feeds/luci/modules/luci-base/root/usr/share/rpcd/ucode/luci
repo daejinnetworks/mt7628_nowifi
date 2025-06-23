@@ -605,6 +605,124 @@ const methods = {
 		}
 	},
 
+	scanLocalNTP: {
+		call: function(request) {
+			let found_servers = [];
+			
+			// 1. LAN 게이트웨이 확인
+			let gateway = uci.get('network', 'lan', 'ipaddr');
+			if (gateway) {
+				// nc로 UDP 123 포트 체크 (busybox 내장)
+				if (system(`timeout 2 sh -c 'echo | nc -u -w1 ${gateway} 123' 2>/dev/null`) === 0) {
+					push(found_servers, {ip: gateway, type: 'Gateway'});
+				} else {
+					// 연결 실패해도 게이트웨이는 후보로 추가
+					push(found_servers, {ip: gateway, type: 'Gateway (추정)'});
+				}
+			}
+			
+			// 2. DNS 서버 확인 (로컬 대역만)
+			let resolv_content = readfile('/etc/resolv.conf');
+			if (resolv_content) {
+				let lines = split(resolv_content, '\n');
+				for (let i = 0; i < length(lines); i++) {
+					let line = lines[i];
+					if (match(line, /^nameserver\s+/)) {
+						let dns_ip = replace(line, /^nameserver\s+/, '');
+						dns_ip = trim(dns_ip);
+						
+						// 로컬 대역인지 확인 (192.168.x.x, 10.x.x.x, 172.16-31.x.x)
+						if (match(dns_ip, /^(192\.168\.|10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.)/)) {
+							if (system(`timeout 2 sh -c 'echo | nc -u -w1 ${dns_ip} 123' 2>/dev/null`) === 0) {
+								push(found_servers, {ip: dns_ip, type: 'DNS'});
+							}
+						}
+					}
+				}
+			}
+			
+			// 3. 일반적인 라우터 IP 확인 (.1, .254)
+			if (gateway) {
+				let base_ip = replace(gateway, /\.\d+$/, '');
+				let common_ips = [base_ip + '.1', base_ip + '.254'];
+				
+				for (let i = 0; i < length(common_ips); i++) {
+					let test_ip = common_ips[i];
+					if (test_ip !== gateway) {  // 게이트웨이와 다른 경우만
+						if (system(`timeout 1 sh -c 'echo | nc -u -w1 ${test_ip} 123' 2>/dev/null`) === 0) {
+							push(found_servers, {ip: test_ip, type: 'Router'});
+						}
+					}
+				}
+			}
+			
+			return { servers: found_servers };
+		}
+	},
+
+	setChronyManualTime: {
+		args: { timestamp: 0 },
+		call: function(request) {
+			let timestamp = +request.args.timestamp;
+			
+			// 입력 값 검증 강화
+			if (isNaN(timestamp) || timestamp < 946684800 || timestamp > 2147483647) {
+				return { error: 'Invalid timestamp range (must be valid Unix timestamp)' };
+			}
+			
+			// chronyc를 사용한 수동 시간 설정
+			try {
+				console.log('Setting manual time to timestamp:', timestamp);
+				
+				// 1. chrony 수동 모드 활성화
+				let manual_on_result = system('chronyc manual on 2>/dev/null');
+				console.log('chronyc manual on result:', manual_on_result);
+				if (manual_on_result !== 0) {
+					return { error: 'Failed to enable manual mode' };
+				}
+				
+				// 2. 안전하게 timestamp를 사용하여 시간 설정
+				let time_obj = localtime(timestamp);
+				if (!time_obj) {
+					system('chronyc manual off 2>/dev/null');
+					return { error: 'Invalid timestamp conversion' };
+				}
+				
+				// 안전한 문자열 포맷팅
+				let formatted_time = sprintf('%04d-%02d-%02d %02d:%02d:%02d',
+					time_obj.year, time_obj.mon, time_obj.mday,
+					time_obj.hour, time_obj.min, time_obj.sec);
+				
+				console.log('Formatted time:', formatted_time);
+				
+				// 직접 date 명령으로 시스템 시간 설정 (가장 안전)
+				let date_result = system(sprintf('date -s "%s" >/dev/null 2>&1', formatted_time));
+				console.log('date command result:', date_result);
+				
+				if (date_result === 0) {
+					// 성공 시 manual 모드 비활성화
+					system('chronyc manual off 2>/dev/null');
+					console.log('Time set successfully');
+					
+					return { 
+						result: true, 
+						timestamp: timestamp,
+						time_set: formatted_time,
+						method: 'date_command'
+					};
+				} else {
+					// 실패 시 정리
+					system('chronyc manual off 2>/dev/null');
+					return { error: 'Failed to set system time' };
+				}
+				
+			} catch (e) {
+				system('chronyc manual off 2>/dev/null');  // 정리
+				return { error: 'Exception: ' + string(e) };
+			}
+		}
+	},
+
 	getNetDeviceStatus: {
 		args: { device: 'string' },
 		call: function(request) {
