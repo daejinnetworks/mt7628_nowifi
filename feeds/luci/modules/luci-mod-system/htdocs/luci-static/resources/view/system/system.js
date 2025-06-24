@@ -75,8 +75,7 @@ callGetLocaltime = rpc.declare({
 callSetLocaltime = rpc.declare({
 	object: 'luci',
 	method: 'setLocaltime',
-	params: [ 'localtime' ],
-	expect: { result: 0 }
+	params: [ 'localtime' ]
 });
 
 callTimezone = rpc.declare({
@@ -203,12 +202,35 @@ CBILocalTime = form.DummyValue.extend({
 					var dateTimeStr = dateVal + 'T' + timeVal;
 					var epoch = Math.floor(new Date(dateTimeStr).getTime() / 1000);
 					callSetLocaltime(epoch);
-					
-					// UCI에 수동 설정 완료 기록
-					uci.set('system', 'ntp', 'enabled', '0');
-					uci.set('system', 'ntp', 'manual_time_set', '1');
-					uci.set('system', 'ntp', 'manual_time_timestamp', epoch.toString());
-					uci.set('system', 'ntp', 'manual_time_date', dateTimeStr);
+
+					// 시스템 시간 설정 (Promise 처리)
+					return callSetLocaltime(epoch).then(function(result) {
+						// 백엔드에서 result 값 확인 (실제 설정된 timestamp인지 검증)
+						if (result && result.result === epoch) {
+							// UCI에 수동 설정 완료 기록
+							uci.set('system', 'ntp', 'enabled', '0');
+							uci.set('system', 'ntp', 'manual_time_set', '1');
+							uci.set('system', 'ntp', 'manual_time_timestamp', epoch.toString());
+							uci.set('system', 'ntp', 'manual_time_date', dateTimeStr);
+						} else {
+							if (typeof ui !== 'undefined' && ui.addNotification) {
+								ui.addNotification(null, E('p', '시간 설정 실패: 백엔드 오류'));
+							}
+						}
+
+						return result;
+					}).catch(function(error) {
+						console.error('callSetLocaltime failed:', error);
+						if (typeof ui !== 'undefined' && ui.addNotification) {
+							ui.addNotification(null, E('p', '시간 설정 실패: ' + (error.message || error)));
+						}
+						throw error;
+					});
+				} else {
+					console.log('Date or time value missing');
+					if (typeof ui !== 'undefined' && ui.addNotification) {
+						ui.addNotification(null, E('p', '날짜와 시간을 모두 입력해주세요'));
+					}
 				}
 			}
 		}
@@ -243,33 +265,40 @@ CBILocalTime = form.DummyValue.extend({
 		function saveNtpSettings() {
 			if (modeSelect.value === 'ntp') {
 				var ntpAddress = ntpInput.value || 'kr.pool.ntp.org';
+				var localAddress = autoCheckbox.checked ? localSelect.value : localInput.value;
 				var period = periodSelect.value || '3600';
-				
+
 				// 현재 설정 확인
 				var currentServers = uci.get('system', 'ntp', 'server') || [];
 				var currentPeriod = uci.get('system', 'ntp', 'update_interval') || '3600';
 				var currentServer = currentServers.length > 0 ? currentServers[0] : 'kr.pool.ntp.org';
-				
+
 				// 변경된 경우에만 업데이트
 				if (currentServer !== ntpAddress || currentPeriod !== period) {
 					// UCI 설정 저장
 					uci.set('system', 'ntp', 'server', [ntpAddress]);
 					uci.set('system', 'ntp', 'update_interval', period);
-					
+
 					// cron 작업 생성 및 파일에 저장
 					var cronEntry = '';
-					if (period === '60') { // 1분
-						cronEntry = '* * * * * /usr/sbin/ntpd -q -p ' + ntpAddress;
-					} else if (period === '3600') { // 1시간  
-						cronEntry = '0 * * * * /usr/sbin/ntpd -q -p ' + ntpAddress;
-					} else if (period === '86400') { // 하루
-						cronEntry = '0 0 * * * /usr/sbin/ntpd -q -p ' + ntpAddress;
+					// localAddress 사용하여 ntpd 명령 구성
+					var ntpdCmd = '/usr/sbin/ntpd -q -p ' + ntpAddress;
+					if (localAddress && localAddress !== '') {
+						ntpdCmd += ' -b ' + localAddress;
 					}
-					
+
+					if (period === '60') { // 1분
+						cronEntry = '* * * * * ' + ntpdCmd;
+					} else if (period === '3600') { // 1시간  
+						cronEntry = '0 * * * * ' + ntpdCmd;
+					} else if (period === '86400') { // 하루
+						cronEntry = '0 0 * * * ' + ntpdCmd;
+					}
+
 					if (cronEntry) {
 						// UCI에 저장
 						uci.set('system', 'ntp', 'cron_entry', cronEntry);
-						
+
 						// /etc/crontabs/root 파일에 NTP cron 작업 추가/업데이트
 						L.resolveDefault(L.rpc.declare({
 							object: 'file',
@@ -286,8 +315,36 @@ CBILocalTime = form.DummyValue.extend({
 
 		// 입력폼 값이 바뀔 때마다 UI를 즉시 갱신
 		modeSelect.addEventListener('change', updateUI);
-		dateInput.addEventListener('input', updateUI);
-		timeInput.addEventListener('input', updateUI);
+		dateInput.addEventListener('input', function() {
+			updateUI();
+			// 수동 시간 입력 시 더미 UCI 값 변경하여 저장 필요 상태로 만들기
+			if (modeSelect.value === 'manual') {
+				var timestamp = Date.now().toString();
+				uci.set('system', 'ntp', 'manual_time_input', timestamp);
+			}
+		});
+		timeInput.addEventListener('input', function() {
+			updateUI();
+			// 수동 시간 입력 시 더미 UCI 값 변경하여 저장 필요 상태로 만들기
+			if (modeSelect.value === 'manual') {
+				var timestamp = Date.now().toString();
+				uci.set('system', 'ntp', 'manual_time_input', timestamp);
+			}
+		});
+
+		// 수동 설정에서 날짜/시간 변경 시 즉시 적용하는 이벤트 추가
+		dateInput.addEventListener('change', function() {
+			if (modeSelect.value === 'manual' && dateInput.value && timeInput.value) {
+				console.log('Date input changed, applying immediately');
+				setManualTime();
+			}
+		});
+		timeInput.addEventListener('change', function() {
+			if (modeSelect.value === 'manual' && dateInput.value && timeInput.value) {
+				console.log('Time input changed, applying immediately');
+				setManualTime();
+			}
+		});
 		ntpInput.addEventListener('change', saveNtpSettings);
 		periodSelect.addEventListener('change', saveNtpSettings);
 
@@ -295,6 +352,7 @@ CBILocalTime = form.DummyValue.extend({
 		function updateLocalAddrUI() {
 			if (autoCheckbox.checked) {
 				localSelect.style.display = '';
+				localSelect.disabled = true; // 자동 모드에서는 비활성화
 				localInput.style.display = 'none';
 				// 드롭다운 값에 현재 타임서버 주소 반영
 				var ntpVal = ntpInput.value || '172.16.0.1';
@@ -303,6 +361,7 @@ CBILocalTime = form.DummyValue.extend({
 			} else {
 				localSelect.style.display = 'none';
 				localInput.style.display = '';
+				localInput.disabled = false; // 수동 입력 모드에서는 활성화
 			}
 		}
 		autoCheckbox.addEventListener('change', updateLocalAddrUI);
@@ -502,15 +561,36 @@ return view.extend({
 					if (dateVal && timeVal) {
 						var dateTimeStr = dateVal + 'T' + timeVal;
 						var epoch = Math.floor(new Date(dateTimeStr).getTime() / 1000);
-						
-						// 시스템 시간 설정
-						callSetLocaltime(epoch);
-						
-						// UCI에 수동 설정 완료 기록
-						uci.set('system', 'ntp', 'enabled', '0');
-						uci.set('system', 'ntp', 'manual_time_set', '1');
-						uci.set('system', 'ntp', 'manual_time_timestamp', epoch.toString());
-						uci.set('system', 'ntp', 'manual_time_date', dateTimeStr);
+
+						// 시스템 시간 설정 (Promise 처리)
+						return callSetLocaltime(epoch).then(function(result) {
+							// 백엔드에서 result 값 확인 (실제 설정된 timestamp인지 검증)
+							if (result && result.result === epoch) {
+								// UCI에 수동 설정 완료 기록
+								uci.set('system', 'ntp', 'enabled', '0');
+								uci.set('system', 'ntp', 'manual_time_set', '1');
+								uci.set('system', 'ntp', 'manual_time_timestamp', epoch.toString());
+								uci.set('system', 'ntp', 'manual_time_date', dateTimeStr);
+							} else {
+								console.error('Time setting failed - backend returned unexpected result:', result);
+								if (typeof ui !== 'undefined' && ui.addNotification) {
+									ui.addNotification(null, E('p', '시간 설정 실패: 백엔드 오류'));
+								}
+							}
+
+							return result;
+						}).catch(function(error) {
+							console.error('callSetLocaltime failed:', error);
+							if (typeof ui !== 'undefined' && ui.addNotification) {
+								ui.addNotification(null, E('p', '시간 설정 실패: ' + (error.message || error)));
+							}
+							throw error;
+						});
+					} else {
+						console.log('Date or time value missing');
+						if (typeof ui !== 'undefined' && ui.addNotification) {
+							ui.addNotification(null, E('p', '날짜와 시간을 모두 입력해주세요'));
+						}
 					}
 				}
 			}
@@ -545,6 +625,7 @@ return view.extend({
 			function saveNtpSettings() {
 				if (modeSelect.value === 'ntp') {
 					var ntpAddress = ntpInput.value || 'kr.pool.ntp.org';
+					var localAddress = autoCheckbox.checked ? localSelect.value : localInput.value;
 					var period = periodSelect.value || '3600';
 					
 					// 현재 설정 확인
@@ -560,18 +641,24 @@ return view.extend({
 						
 						// cron 작업 생성 및 파일에 저장
 						var cronEntry = '';
-						if (period === '60') { // 1분
-							cronEntry = '* * * * * /usr/sbin/ntpd -q -p ' + ntpAddress;
-						} else if (period === '3600') { // 1시간  
-							cronEntry = '0 * * * * /usr/sbin/ntpd -q -p ' + ntpAddress;
-						} else if (period === '86400') { // 하루
-							cronEntry = '0 0 * * * /usr/sbin/ntpd -q -p ' + ntpAddress;
+						// localAddress 사용하여 ntpd 명령 구성
+						var ntpdCmd = '/usr/sbin/ntpd -q -p ' + ntpAddress;
+						if (localAddress && localAddress !== '') {
+							ntpdCmd += ' -b ' + localAddress;
 						}
-						
+
+						if (period === '60') { // 1분
+							cronEntry = '* * * * * ' + ntpdCmd;
+						} else if (period === '3600') { // 1시간  
+							cronEntry = '0 * * * * ' + ntpdCmd;
+						} else if (period === '86400') { // 하루
+							cronEntry = '0 0 * * * ' + ntpdCmd;
+						}
+
 						if (cronEntry) {
 							// UCI에 저장
 							uci.set('system', 'ntp', 'cron_entry', cronEntry);
-							
+
 							// /etc/crontabs/root 파일에 NTP cron 작업 추가/업데이트
 							L.resolveDefault(L.rpc.declare({
 								object: 'file',
@@ -588,8 +675,37 @@ return view.extend({
 
 			// 입력폼 값이 바뀔 때마다 UI를 즉시 갱신
 			modeSelect.addEventListener('change', updateUI);
-			dateInput.addEventListener('input', updateUI);
-			timeInput.addEventListener('input', updateUI);
+			dateInput.addEventListener('input', function() {
+				updateUI();
+				// 수동 시간 입력 시 더미 UCI 값 변경하여 저장 필요 상태로 만들기
+				if (modeSelect.value === 'manual') {
+					var timestamp = Date.now().toString();
+					uci.set('system', 'ntp', 'manual_time_input', timestamp);
+				}
+			});
+			timeInput.addEventListener('input', function() {
+				updateUI();
+				// 수동 시간 입력 시 더미 UCI 값 변경하여 저장 필요 상태로 만들기
+				if (modeSelect.value === 'manual') {
+					var timestamp = Date.now().toString();
+					uci.set('system', 'ntp', 'manual_time_input', timestamp);
+				}
+			});
+
+			// 수동 설정에서 날짜/시간 변경 시 즉시 적용하는 이벤트 추가
+			dateInput.addEventListener('change', function() {
+				if (modeSelect.value === 'manual' && dateInput.value && timeInput.value) {
+					console.log('Date input changed, applying immediately');
+					setManualTime();
+				}
+			});
+			timeInput.addEventListener('change', function() {
+				if (modeSelect.value === 'manual' && dateInput.value && timeInput.value) {
+					console.log('Time input changed, applying immediately');
+					setManualTime();
+				}
+			});
+
 			ntpInput.addEventListener('change', saveNtpSettings);
 			periodSelect.addEventListener('change', saveNtpSettings);
 
@@ -597,6 +713,7 @@ return view.extend({
 			function updateLocalAddrUI() {
 				if (autoCheckbox.checked) {
 					localSelect.style.display = '';
+					localSelect.disabled = true; // 자동 모드에서는 비활성화
 					localInput.style.display = 'none';
 					// 드롭다운 값에 현재 타임서버 주소 반영
 					var ntpVal = ntpInput.value || '172.16.0.1';
@@ -605,6 +722,7 @@ return view.extend({
 				} else {
 					localSelect.style.display = 'none';
 					localInput.style.display = '';
+					localInput.disabled = false; // 수동 입력 모드에서는 활성화
 				}
 			}
 			autoCheckbox.addEventListener('change', updateLocalAddrUI);
