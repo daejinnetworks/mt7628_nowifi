@@ -441,7 +441,6 @@ return view.extend({
 		s.tab('Time', _('Time'));
 		s.tab('hostname_dns', _('Hostname & DNS'));
 		s.tab('logging', _('Logging'));
-		s.tab('timesync', _('Time Synchronization'));
 
 
 		/*
@@ -758,16 +757,50 @@ return view.extend({
 			var buttonHoverStyle = "this.style.background='#e0e7ef';this.style.boxShadow='0 4px 12px rgba(0,0,0,0.13)';";
 			var buttonOutStyle = "this.style.background='linear-gradient(180deg, #f8fafc 0%, #e2e8f0 100%)';this.style.boxShadow='0 2px 6px rgba(0,0,0,0.08)';";
 
+			// 현재 시스템 호스트이름 읽기
+			var currentHostname = uci.get('system', 'system', 'hostname');
+			if (!currentHostname) {
+				// 대체 방법으로 첫 번째 system 섹션에서 읽기 시도
+				var systemSections = uci.sections('system', 'system');
+				if (systemSections && systemSections.length > 0) {
+					currentHostname = systemSections[0].hostname;
+				}
+			}
+			currentHostname = currentHostname || 'UI-2PV';
+			
 			return E('div', { 'style': 'padding: 16px 0 0 0; max-width: 500px; font-size:12px;' }, [
 				// 게이트웨이 이름 한 줄
 				E('div', { 'style': 'display:flex; align-items:center; margin-bottom:18px;' }, [
 					E('div', { 'style': 'width:140px; font-weight:bold; margin-right:24px; text-align:right;' }, '게이트웨이 이름'),
-					E('input', { 'type': 'text', 'value': 'XECUREGATEWAY', 'style': 'width:200px; margin-right:24px;' }),
+					E('input', { 
+						'type': 'text', 
+						'value': currentHostname, 
+						'style': 'width:200px; margin-right:24px;',
+						'id': 'hostname-input'
+					}),
 					E('button', {
 						'class': 'cbi-button',
 						'style': buttonStyle,
 						'onmouseover': buttonHoverStyle,
-						'onmouseout': buttonOutStyle
+						'onmouseout': buttonOutStyle,
+						'onclick': function() {
+							var hostnameInput = document.getElementById('hostname-input');
+							var newHostname = hostnameInput.value.trim();
+							if (newHostname && newHostname !== '') {
+								// UCI에 호스트이름 설정
+								uci.set('system', 'system', 'hostname', newHostname);
+								// 저장 및 적용
+								uci.save().then(function() {
+									return uci.apply();
+								}).then(function() {
+									ui.addNotification(null, E('p', '호스트이름이 "' + newHostname + '"으로 변경되었습니다.'), 'info');
+								}).catch(function(error) {
+									ui.addNotification(null, E('p', '호스트이름 변경 실패: ' + error.message), 'error');
+								});
+							} else {
+								ui.addNotification(null, E('p', '유효한 호스트이름을 입력해주세요.'), 'warning');
+							}
+						}
 					}, '이름 적용')
 				]),
 				// 도메인 네임 서버(DNS) 라벨 + 첫 입력폼
