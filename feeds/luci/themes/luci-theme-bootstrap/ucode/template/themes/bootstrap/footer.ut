@@ -1,7 +1,8 @@
 		{% if (!blank_page): %}
 		</div>
-		<footer>
-			<span class="pull-right" style="text-align: right; display: block;">
+		<footer style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+			<div></div>
+			<span style="text-align: right;">
 				Powered by
 				<a href="https://xnsystems.com" target="_blank" rel="noreferrer">
 					XNsystems</a>
