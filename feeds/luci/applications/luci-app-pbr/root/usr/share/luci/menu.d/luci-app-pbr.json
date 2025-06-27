@@ -1,7 +1,7 @@
 {
 	"admin/network/pbr": {
 		"title": "Policy Routing",
-		"order": 90,
+		"order": 30,
 		"action": {
 			"type": "view",
 			"path": "pbr/overview"

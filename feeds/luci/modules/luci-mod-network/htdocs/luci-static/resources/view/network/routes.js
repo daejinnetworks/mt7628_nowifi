@@ -26,200 +26,131 @@ return view.extend({
 			return e && e[0] > 0;
 		});
 
-		m = new form.Map('network', _('Routing'), _('Routing defines over which interface and gateway a certain host or network can be reached.') +
-			'<br/>' + _('Routes go in routing tables and define the specific path to reach destinations.') +
-			'<br/>' + _('Rules determine which routing table to use, based on conditions like source address or interface.'));
-		m.tabbed = true;
+		m = new form.Map('network', _('Static Routing'), _('Routing defines over which interface and gateway a certain host or network can be reached.'));
 
-		for (var family = 4; family <= 6; family += 2) {
-			s = m.section(form.GridSection, (family == 6) ? 'route6' : 'route', (family == 6) ? _('Static IPv6 Routes') : _('Static IPv4 Routes'));
-			s.anonymous = true;
-			s.addremove = true;
-			s.sortable = true;
-			s.cloneable = true;
-			s.nodescriptions = true;
-
-			s.tab('general', _('General Settings'));
-			s.tab('advanced', _('Advanced Settings'));
-
-			o = s.taboption('general', widgets.NetworkSelect, 'interface', _('Interface'), _('Specifies the logical interface name of the parent (or master) interface this route belongs to'));
-			o.loopback = true;
-			o.nocreate = true;
-			o.rmempty = true;
-
-			o = s.taboption('general', form.ListValue, 'type', _('Route type'), _('Specifies the route type to be created'));
-			o.modalonly = true;
-			o.value('', 'unicast');
-			o.value('local');
-			o.value('broadcast');
-			o.value('multicast');
-			o.value('unreachable');
-			o.value('prohibit');
-			o.value('blackhole');
-			o.value('anycast');
-			o.value('throw');
-
-			o = s.taboption('general', form.Value, 'target', _('Target'), _('Network address'));
-			o.rmempty = false;
-			o.datatype = (family == 6) ? 'cidr6' : 'cidr4';
-			o.placeholder = (family == 6) ? '::/0' : '0.0.0.0/0';
-			o.cfgvalue = function(section_id) {
-				var section_type = uci.get('network', section_id, '.type'),
-				    target = uci.get('network', section_id, 'target'),
-				    mask = uci.get('network', section_id, 'netmask'),
-				    v6 = (section_type == 'route6') ? true : false,
-				    bits = mask ? network.maskToPrefix(mask, v6) : (v6 ? 128 : 32);
-				if (target) {
-					return target.split('/')[1] ? target : target + '/' + bits;
+		// IPv4 라우트만 처리 (탭 없이)
+		s = m.section(form.GridSection, 'route', _('Static IPv4 Routes'));
+		s.anonymous = true;
+		s.addremove = true;
+		s.sortable = true;
+		s.cloneable = true;
+		s.nodescriptions = true;
+		
+		// 모달 제목 커스터마이징
+		s.addModalTitle = function(/* ... */) {
+			return E('div', { 'style': 'text-align: center; margin-bottom: 20px;' }, [
+				E('h3', { 'style': 'margin: 0; color: #333; font-size: 18px; font-weight: bold;' }, _('정적 라우팅 추가'))
+			]);
+		};
+		
+		// 모달 렌더링 오버라이드
+		var originalRenderModal = s.renderModal || s.renderSectionModal;
+		if (originalRenderModal) {
+			s.renderModal = function(section_id, ev) {
+				var modal = originalRenderModal.call(this, section_id, ev);
+				if (modal && modal.firstElementChild) {
+					var titleDiv = this.addModalTitle();
+					modal.firstElementChild.insertBefore(titleDiv, modal.firstElementChild.firstChild);
 				}
-			}
-			o.write = function(section_id, formvalue) {
-				uci.set('network', section_id, 'target', formvalue);
-				uci.unset('network', section_id, 'netmask');
-			}
-
-			o = s.taboption('general', form.Value, 'gateway', _('Gateway'), _('Specifies the network gateway. If omitted, the gateway from the parent interface is taken if any, otherwise creates a link scope route. If set to 0.0.0.0 no gateway will be specified for the route'));
-			o.datatype = (family == 6) ? 'ip6addr("nomask")' : 'ip4addr("nomask")';
-			o.placeholder = (family == 6) ? 'fe80::1' : '192.168.0.1';
-
-			o = s.taboption('advanced', form.Value, 'metric', _('Metric'), _('Ordinal: routes with the lowest metric match first'));
-			o.datatype = 'uinteger';
-			o.placeholder = 0;
-			o.textvalue = function(section_id) {
-				return this.cfgvalue(section_id) || E('em', _('auto'));
+				return modal;
 			};
-
-			o = s.taboption('advanced', form.Value, 'mtu', _('MTU'), _('Packets exceeding this value may be fragmented'));
-			o.modalonly = true;
-			o.datatype = 'and(uinteger,range(64,9000))';
-			o.placeholder = 1500;
-
-			o = s.taboption('advanced', form.Value, 'table', _('Table'), _('Routing table into which to insert this rule.') + '<br/>' +
-				_('A numeric table index, or symbol alias declared in %s. Special aliases local (255), main (254) and default (253) are also valid').format('<code>/etc/iproute2/rt_tables</code>')
-				+ '<br/>' + _('Only interfaces using this table (via override) will use this route.'));
-			o.datatype = 'or(uinteger, string)';
-			for (var i = 0; i < rtTables.length; i++)
-				o.value(rtTables[i][1], '%s (%d)'.format(rtTables[i][1], rtTables[i][0]));
-			o.textvalue = function(section_id) {
-				return this.cfgvalue(section_id) || E('em', _('auto'));
-			};
-
-			o = s.taboption('advanced', form.Value, 'source', _('Source'), _('Specifies the preferred source address when sending to destinations covered by the target')
-				+ '<br/>' + _('This is only used if no default route matches the destination gateway'));
-			o.modalonly = true;
-			o.datatype = (family == 6) ? 'ip6addr' : 'ip4addr';
-			for (var i = 0; i < netDevs.length; i++) {
-				var addrs = (family == 6) ? netDevs[i].getIP6Addrs() : netDevs[i].getIPAddrs();
-				for (var j = 0; j < addrs.length; j++)
-					o.value(addrs[j].split('/')[0]);
-			}
-
-			o = s.taboption('advanced', form.Flag, 'onlink', _('On-link'), _('When enabled, gateway is on-link even if the gateway does not match any interface prefix'));
-			o.modalonly = true;
-			o.default = o.disabled;
-
-			o = s.taboption('advanced', form.Flag, 'disabled', _('Disable'));
-			o.modalonly = false;
-			o.editable = true;
-			o.default = o.disabled;
 		}
 
-		for (var family = 4; family <= 6; family += 2) {
-			s = m.section(form.GridSection, (family == 6) ? 'rule6' : 'rule', (family == 6) ? _('IPv6 Rules') : _('IPv4 Rules'));
-			s.anonymous = true;
-			s.addremove = true;
-			s.sortable = true;
-			s.cloneable = true;
-			s.nodescriptions = true;
-
-			s.tab('general', _('General Settings'));
-			s.tab('advanced', _('Advanced Settings'));
-
-			o = s.taboption('general', form.Value, 'priority', _('Priority'), _('Execution order of this IP rule: lower numbers go first'));
-			o.datatype = 'uinteger';
-			o.placeholder = 30000;
-			o.textvalue = function(section_id) {
-				return this.cfgvalue(section_id) || E('em', _('auto'));
+		// 네트워크 주소와 CIDR을 합친 커스텀 위젯
+		o = s.option(form.Value, 'target', _('네트워크 주소'));
+		o.rmempty = false;
+		o.placeholder = '192.168.1.0/24';
+		o.datatype = 'cidr4';
+		o.cfgvalue = function(section_id) {
+			var target = uci.get('network', section_id, 'target'),
+			    mask = uci.get('network', section_id, 'netmask'),
+			    bits = mask ? network.maskToPrefix(mask, false) : 24;
+			if (target) {
+				return target.split('/')[1] ? target : target + '/' + bits;
+			}
+		};
+		o.write = function(section_id, formvalue) {
+			uci.set('network', section_id, 'target', formvalue);
+			uci.unset('network', section_id, 'netmask');
+		};
+		o.renderWidget = function(section_id, option_index, cfgvalue) {
+			var value = (cfgvalue != null) ? cfgvalue : this.default;
+			var parts = (value || '').split('/');
+			var ip = parts[0] || '';
+			var cidr = parts[1] || '24';
+			var self = this;
+			
+			var updateValue = function() {
+				var ipEl = document.getElementById(self.cbid(section_id) + '_ip');
+				var cidrEl = document.getElementById(self.cbid(section_id) + '_cidr');
+				if (ipEl && cidrEl) {
+					var combinedValue = ipEl.value && cidrEl.value ? ipEl.value + '/' + cidrEl.value : '';
+					var hiddenInput = document.getElementById(self.cbid(section_id));
+					if (hiddenInput) {
+						hiddenInput.value = combinedValue;
+						hiddenInput.dispatchEvent(new Event('change', { bubbles: true }));
+					}
+				}
 			};
+			
+			var container = E('div', { 'style': 'display: flex; align-items: center; gap: 8px; width: 100%;' }, [
+				E('input', {
+					'id': this.cbid(section_id) + '_ip',
+					'class': 'cbi-input-text',
+					'type': 'text',
+					'placeholder': '192.168.1.0',
+					'value': ip,
+					'change': updateValue,
+					'keyup': updateValue,
+					'blur': updateValue
+				}),
+				E('span', { 'style': 'font-weight: bold; color: #666; margin: 0 4px;' }, '/'),
+				E('input', {
+					'id': this.cbid(section_id) + '_cidr',
+					'class': 'cbi-input-text',
+					'type': 'text',
+					'placeholder': '24',
+					'value': cidr,
+					'style': 'width: 60px;',
+					'change': updateValue,
+					'keyup': updateValue,
+					'blur': updateValue
+				}),
+				E('input', {
+					'id': this.cbid(section_id),
+					'type': 'hidden',
+					'value': value || ''
+				})
+			]);
+			
+			return container;
+		};
+		o.formvalue = function(section_id) {
+			var hiddenInput = document.getElementById(this.cbid(section_id));
+			return hiddenInput ? hiddenInput.value : null;
+		};
 
-			o = s.taboption('general', form.ListValue, 'action', _('Rule type'), _('Specifies the rule target routing action'));
-			o.modalonly = true;
-			o.value('', 'unicast');
-			o.value('unreachable');
-			o.value('prohibit');
-			o.value('blackhole');
-			o.value('throw');
+		// 게이트웨이 IP
+		o = s.option(form.Value, 'gateway', _('게이트웨이 IP'));
+		o.datatype = 'ip4addr("nomask")';
+		o.placeholder = '192.168.1.1';
 
-			o = s.taboption('general', widgets.NetworkSelect, 'in', _('Incoming interface'), _('Match traffic from this interface'));
-			o.loopback = true;
-			o.nocreate = true;
+		// 메트릭
+		o = s.option(form.Value, 'metric', _('메트릭'));
+		o.datatype = 'uinteger';
+		o.placeholder = '0';
+		o.default = '0';
 
-			o = s.taboption('general', form.Value, 'src', _('Source'), _('Match traffic from this source subnet (CIDR notation)'));
-			o.datatype = (family == 6) ? 'cidr6' : 'cidr4';
-			o.placeholder = (family == 6) ? '::/0' : '0.0.0.0/0';
-			o.textvalue = function(section_id) {
-				return this.cfgvalue(section_id) || E('em', _('any'));
-			};
+		// 인터페이스 (드롭다운)
+		o = s.option(widgets.NetworkSelect, 'interface', _('인터페이스'));
+		o.loopback = true;
+		o.nocreate = true;
+		o.rmempty = true;
 
-			o = s.taboption('general', form.Value, 'ipproto', _('IP Protocol'), _('Match traffic IP protocol type'));
-			o.datatype = 'range(0,255)';
-			tn.protocols.forEach(function(p) {
-				o.value(p.i, p.d);
-			});
-
-			o = s.taboption('general', widgets.NetworkSelect, 'out', _('Outgoing interface'), _('Match traffic destined to this interface'));
-			o.loopback = true;
-			o.nocreate = true;
-
-			o = s.taboption('general', form.Value, 'dest', _('Destination'), _('Match traffic destined to this subnet (CIDR notation)'));
-			o.datatype = (family == 6) ? 'cidr6' : 'cidr4';
-			o.placeholder = (family == 6) ? '::/0' : '0.0.0.0/0';
-			o.textvalue = function(section_id) {
-				return this.cfgvalue(section_id) || E('em', _('any'));
-			};
-
-			o = s.taboption('advanced', form.Value, 'lookup', _('Table'), _('Routing table to use for traffic matching this rule.') + '<br/>' +
-				_('A numeric table index, or symbol alias declared in %s. Special aliases local (255), main (254) and default (253) are also valid').format('<code>/etc/iproute2/rt_tables</code>')
-				+ '<br/>' + _('Matched traffic re-targets to an interface using this table.'));
-			o.datatype = 'or(uinteger, string)';
-			for (var i = 0; i < rtTables.length; i++)
-				o.value(rtTables[i][1], '%s (%d)'.format(rtTables[i][1], rtTables[i][0]));
-
-			o = s.taboption('advanced', form.Value, 'goto', _('Jump to rule'), _('Jumps to another rule specified by its priority value'));
-			o.modalonly = true;
-			o.datatype = 'uinteger';
-			o.placeholder = 80000;
-
-			o = s.taboption('advanced', form.Value, 'mark', _('Firewall mark'), _('Specifies the fwmark and optionally its mask to match, e.g. 0xFF to match mark 255 or 0x0/0x1 to match any even mark value'));
-			o.modalonly = true;
-			o.datatype = 'string';
-			o.placeholder = '0x1/0xf';
-
-			o = s.taboption('advanced', form.Value, 'tos', _('Type of service'), _('Specifies the TOS value to match in IP headers'));
-			o.modalonly = true;
-			o.datatype = 'uinteger';
-			o.placeholder = 10;
-
-			o = s.taboption('advanced', form.Value, 'uidrange', _('User identifier'), _('Specifies an individual UID or range of UIDs to match, e.g. 1000 to match corresponding UID or 1000-1005 to inclusively match all UIDs within the corresponding range'));
-			o.modalonly = true;
-			o.datatype = 'string';
-			o.placeholder = '1000-1005';
-
-			o = s.taboption('advanced', form.Value, 'suppress_prefixlength', _('Prefix suppressor'), _('Reject routing decisions that have a prefix length less than or equal to the specified value')
-				+ '<br/>' + _('Prevents overly broad routes being considered. Setting 16 would consider /17, /24, /28 or more specific routes yet ignore /16, /8, /0 (default) routes'));
-			o.modalonly = true;
-			o.datatype = (family == 6) ? 'ip6prefix' : 'ip4prefix';
-			o.placeholder = (family == 6) ? 64 : 24;
-
-			o = s.taboption('advanced', form.Flag, 'invert', _('Invert match'), _('If set, the meaning of the match options is inverted'));
-			o.modalonly = true;
-			o.default = o.disabled;
-
-			o = s.taboption('advanced', form.Flag, 'disabled', _('Disable'));
-			o.modalonly = false;
-			o.editable = true;
-			o.default = o.disabled;
-		}
+		// 주석
+		o = s.option(form.Value, 'comment', _('주석'));
+		o.rmempty = true;
+		o.placeholder = _('Enter description...');
 
 		return m.render();
 	}
