@@ -72,7 +72,7 @@
 	},
 
 	"luci-mod-system-backup": {
-		"description": "Grant access to flash operations",
+		"description": "Grant access to backup and restore operations",
 		"read": {
 			"cgi-io": [ "backup", "download" ],
 			"file": {
@@ -83,7 +83,13 @@
 				"/proc/mtd": [ "read" ],
 				"/proc/partitions": [ "read" ],
 				"/proc/sys/kernel/hostname": [ "read" ],
-				"/sbin/sysupgrade --list-backup": [ "exec" ]
+				"/sbin/sysupgrade --list-backup": [ "exec" ],
+				"/tmp/*-backup-*.tar.gz": [ "read", "stat" ],
+				"/tmp/*-rollback-*.tar.gz": [ "read", "stat" ],
+				"/tmp/*.tar.gz": [ "read", "stat" ],
+				"/tmp/*.tgz": [ "read", "stat" ],
+				"/tmp/*": [ "read", "stat" ],
+				"/tmp/backup_files.txt": [ "read" ]
 			},
 			"ubus": {
 				"file": [ "exec", "read", "stat" ]
@@ -93,6 +99,11 @@
 			"cgi-io": [ "upload" ],
 			"file": {
 				"/bin/tar -tzf /tmp/backup.tar.gz": [ "exec" ],
+				"/bin/tar -tzf /tmp/*.tar.gz": [ "exec" ],
+				"/bin/tar -tzf /tmp/*.tgz": [ "exec" ],
+				"/bin/tar -tzf /tmp/*-rollback-*.tar.gz": [ "exec" ],
+				"/bin/tar -czf /tmp/*-backup-*.tar.gz -T /tmp/backup_files.txt": [ "exec" ],
+				"/bin/tar -czf /tmp/*-rollback-*.tar.gz -T /tmp/backup_files.txt": [ "exec" ],
 				"/etc/sysupgrade.conf": [ "write" ],
 				"/sbin/firstboot -r -y": [ "exec" ],
 				"/sbin/reboot": [ "exec" ],
@@ -106,10 +117,20 @@
 				"/sbin/sysupgrade -u /tmp/firmware.bin": [ "exec" ],
 				"/sbin/sysupgrade -u -k /tmp/firmware.bin": [ "exec" ],
 				"/sbin/sysupgrade --restore-backup /tmp/backup.tar.gz": [ "exec" ],
+				"/sbin/sysupgrade --restore-backup /tmp/*.tar.gz": [ "exec" ],
+				"/sbin/sysupgrade --restore-backup /tmp/*.tgz": [ "exec" ],
+				"/sbin/sysupgrade --restore-backup /tmp/*-rollback-*.tar.gz": [ "exec" ],
+				"/sbin/sysupgrade --restore-backup /tmp/*": [ "exec" ],
 				"/sbin/sysupgrade --test /tmp/firmware.bin": [ "exec" ],
 				"/sbin/sysupgrade /tmp/firmware.bin": [ "exec" ],
 				"/tmp/backup.tar.gz": [ "write" ],
-				"/tmp/firmware.bin": [ "write" ]
+				"/tmp/*.tar.gz": [ "write", "remove" ],
+				"/tmp/*.tgz": [ "write", "remove" ],
+				"/tmp/*": [ "write", "remove" ],
+				"/tmp/firmware.bin": [ "write" ],
+				"/tmp/*-backup-*.tar.gz": [ "write", "remove" ],
+				"/tmp/*-rollback-*.tar.gz": [ "write", "remove" ],
+				"/tmp/backup_files.txt": [ "write", "remove" ]
 			},
 			"ubus": {
 				"file": [ "exec", "remove", "write" ],
