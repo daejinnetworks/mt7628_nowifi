@@ -338,6 +338,21 @@ case "$1" in
 				json_cleanup
 				set_init_action "$packageName" "$action"
 				;;
+			getRoutingInfo)
+				read -r input
+				json_load "$input"
+				json_get_var name 'name'
+				json_cleanup
+				json_init
+				routing_output="$(ip route show table all 2>/dev/null | head -20)"
+				if [ -n "$routing_output" ]; then
+					json_add_string "stdout" "$routing_output"
+				else
+					json_add_string "error" "Failed to get routing information"
+				fi
+				json_dump
+				json_cleanup
+				;;
 		esac
 	;;
 esac

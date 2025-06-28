@@ -1,10 +1,10 @@
 {
-	"admin/network/pbr": {
-		"title": "Policy Routing",
-		"order": 30,
+	"admin/network/pbr_custom": {
+		"title": "Advanced Routing",
+		"order": 40,
 		"action": {
 			"type": "view",
-			"path": "pbr/overview"
+			"path": "pbr/policy_routing"
 		},
 		"depends": {
 			"acl": [

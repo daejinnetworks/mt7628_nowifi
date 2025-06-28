@@ -930,6 +930,26 @@ const methods = {
 
 			return result;
 		}
+	},
+
+	getRoutingInfo: {
+		call: function(request) {
+			let result = {};
+			
+			try {
+				let proc = popen('/bin/sh -c "ip route show table all | head -20"');
+				if (proc) {
+					result.stdout = proc.read('all');
+					proc.close();
+				} else {
+					result.error = 'Failed to execute command';
+				}
+			} catch (e) {
+				result.error = e.message;
+			}
+			
+			return result;
+		}
 	}
 
 };
