@@ -13,60 +13,21 @@
 		}
 	},
 
-	"admin/firewall/zones": {
-		"title": "General Settings",
+	"admin/firewall/trans": {
+		"title": "Transmission Control",
 		"order": 10,
 		"action": {
 			"type": "view",
-			"path": "firewall/zones"
+			"path": "firewall/control"
 		}
 	},
 
-	"admin/firewall/forwards": {
-		"title": "Port Forwards",
+	"admin/firewall/self": {
+		"title": "Self Control",
 		"order": 20,
 		"action": {
 			"type": "view",
-			"path": "firewall/forwards"
-		}
-	},
-
-	"admin/firewall/rules": {
-		"title": "Traffic Rules",
-		"order": 30,
-		"action": {
-			"type": "view",
-			"path": "firewall/rules"
-		}
-	},
-
-	"admin/firewall/snats": {
-		"title": "NAT Rules",
-		"order": 40,
-		"action": {
-			"type": "view",
-			"path": "firewall/snats"
-		}
-	},
-
-	"admin/firewall/ipsets": {
-		"title": "IP Sets",
-		"order": 45,
-		"action": {
-			"type": "view",
-			"path": "firewall/ipsets"
-		}
-	},
-
-	"admin/firewall/custom": {
-		"title": "Custom Rules",
-		"order": 50,
-		"action": {
-			"type": "view",
-			"path": "firewall/custom"
-		},
-		"depends": {
-			"fs": { "/usr/share/fw3/helpers.conf": "file" }
+			"path": "firewall/selfControl"
 		}
 	}
 }

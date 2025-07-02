@@ -1,7 +1,7 @@
 {
 	"admin/administrator/admin_config": {
 		"title": "Admin Config",
-		"order": 10,
+		"order": 20,
 		"action": {
 			"type": "view",
 			"path": "administrator/admin_config"
@@ -13,7 +13,7 @@
 
 	"admin/administrator/basic_config": {
 		"title": "Basic Config",
-		"order": 20,
+		"order": 30,
 		"action": {
 			"type": "view",
 			"path": "administrator/basic_config"
@@ -25,7 +25,7 @@
 
 	"admin/administrator/smtp": {
 		"title": "SMTP",
-		"order": 30,
+		"order": 40,
 		"action": {
 			"type": "view",
 			"path": "administrator/smtp"
