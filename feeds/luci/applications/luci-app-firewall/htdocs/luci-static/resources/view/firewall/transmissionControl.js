@@ -150,11 +150,1346 @@ return view.extend({
 		expect: { result: [] }
 	}),
 
+	// IP 주소를 타입별로 분류하는 함수
+	categorizeIPAddresses: function(hosts) {
+		var ipCategories = {
+			network: [],      // 네트워크 대역 (CIDR 포함)
+			interface: [],    // 인터페이스 IP
+			host: [],        // 호스트 IP (UI-PV-VPN 등)
+			vpn: [],         // VPN 관련 IP
+			custom: []       // 사용자 정의
+		};
+
+		// 호스트 힌트에서 IP 정보 추출 및 분류
+		Object.keys(hosts).forEach(function(key) {
+			var host = hosts[key];
+			if (host.ipv4) {
+				var ip = host.ipv4;
+				var name = host.name || '';
+				
+				// VPN 관련 IP 판별 (UI-PV-VPN 등)
+				if (name.includes('VPN') || name.includes('UI-PV')) {
+					ipCategories.vpn.push({
+						ip: ip,
+						name: name,
+						display: ip + ' (' + name + ')'
+					});
+				}
+				// 네트워크 대역 판별 (CIDR 포함)
+				else if (ip.includes('/')) {
+					ipCategories.network.push({
+						ip: ip,
+						name: name,
+						display: ip + (name ? ' (' + name + ')' : '')
+					});
+				}
+				// 인터페이스 IP 판별
+				else if (name.includes('interface') || name === 'lan' || name === 'wan') {
+					ipCategories.interface.push({
+						ip: ip,
+						name: name,
+						display: ip + ' (' + name + ')'
+					});
+				}
+				// 일반 호스트 IP
+				else {
+					ipCategories.host.push({
+						ip: ip,
+						name: name,
+						display: ip + (name ? ' (' + name + ')' : '')
+					});
+				}
+			}
+		});
+
+		return ipCategories;
+	},
+
+	// IP 타입 드롭다운 옵션 생성
+	createIPTypeOptions: function(ipCategories) {
+		var options = [
+			{ value: 'direct', label: _('직접입력(네트워크)') }
+		];
+
+		if (ipCategories.network.length > 0) {
+			options.push({ value: 'network', label: _('네트워크 대역') });
+		}
+		if (ipCategories.interface.length > 0) {
+			options.push({ value: 'interface', label: _('인터페이스 IP') });
+		}
+		if (ipCategories.host.length > 0) {
+			options.push({ value: 'host', label: _('호스트 IP') });
+		}
+		if (ipCategories.vpn.length > 0) {
+			options.push({ value: 'vpn', label: _('VPN IP') });
+		}
+
+		return options;
+	},
+
+	// IP 주소 드롭다운 옵션 생성
+	createIPAddressOptions: function(ipCategories, selectedType) {
+		var options = [
+			{ value: '', label: _('-- IP 주소 선택 --') }
+		];
+
+		var selectedCategory = ipCategories[selectedType] || [];
+		selectedCategory.forEach(function(item) {
+			options.push({
+				value: item.ip,
+				label: item.display
+			});
+		});
+
+		return options;
+	},
+
+	// IP 주소 드롭다운을 동적으로 업데이트
+	updateIPAddressDropdown: function(selectedType, target) {
+		var dropdown = document.getElementById(target + '-ip-dropdown');
+		var ipInputsContainer = dropdown.parentNode.nextElementSibling;
+		
+		if (selectedType === 'direct') {
+			// 직접입력 모드: 드롭다운 숨기고 IP 입력 필드 보이기
+			dropdown.style.display = 'none';
+			if (ipInputsContainer) ipInputsContainer.style.display = 'flex';
+		} else {
+			// 선택 모드: 드롭다운 보이고 IP 입력 필드 숨기기
+			dropdown.style.display = 'block';
+			if (ipInputsContainer) ipInputsContainer.style.display = 'none';
+			
+			// 드롭다운 옵션 업데이트
+			if (this.currentIPCategories) {
+				var options = this.createIPAddressOptions(this.currentIPCategories, selectedType);
+				dropdown.innerHTML = '';
+				options.forEach(function(option) {
+					var optionElement = E('option', { 'value': option.value }, option.label);
+					dropdown.appendChild(optionElement);
+				});
+			}
+		}
+	},
+
+	// 선택된 IP를 입력 필드에 채우기
+	populateIPFields: function(selectedIP, target) {
+		if (!selectedIP) return;
+		
+		var parts = selectedIP.split('.');
+		if (parts.length === 4) {
+			var ipInputs = document.querySelectorAll('input[data-uci="' + target + '_ip"]');
+			ipInputs.forEach(function(input, index) {
+				if (parts[index]) {
+					input.value = parts[index];
+				}
+			});
+		}
+	},
+
+	// IP 카테고리를 UI에 적용
+	// 인터페이스/존 정보에서 입력인터페이스 옵션 생성
+	createInterfaceOptions: function() {
+		var options = [
+			{ value: '', label: _('Input (this device)') },
+			{ value: '*', label: _('Any zone') }
+		];
+
+		// UCI에서 방화벽 존 정보 가져오기
+		var zones = uci.sections('firewall', 'zone');
+		zones.forEach(function(zone) {
+			if (zone.name && zone.name !== 'loopback') {
+				options.push({
+					value: zone.name,
+					label: zone.name.toUpperCase()
+				});
+			}
+		});
+
+		// 네트워크 인터페이스 정보 추가 (hosts에서)
+		if (this.currentNetworkInterfaces) {
+			this.currentNetworkInterfaces.forEach(function(iface) {
+				// 중복 방지
+				var exists = options.some(function(opt) {
+					return opt.value === iface.name;
+				});
+				if (!exists) {
+					options.push({
+						value: iface.name,
+						label: iface.display
+					});
+				}
+			});
+		}
+
+		return options;
+	},
+
+	// 네트워크 인터페이스 정보 수집
+	collectNetworkInterfaces: function(hosts) {
+		var interfaces = [];
+		
+		// 호스트 정보에서 인터페이스 추출
+		Object.keys(hosts).forEach(function(key) {
+			var host = hosts[key];
+			if (host.name && (host.name === 'lan' || host.name === 'wan' || 
+			    host.name.includes('interface') || host.name.includes('vpn'))) {
+				interfaces.push({
+					name: host.name,
+					ip: host.ipv4 || host.ipv6,
+					display: host.name.toUpperCase() + (host.ipv4 ? ' (' + host.ipv4 + ')' : '')
+				});
+			}
+		});
+
+		// UCI에서 네트워크 인터페이스 정보 추가
+		var networkSections = uci.sections('network', 'interface');
+		networkSections.forEach(function(section) {
+			if (section['.name'] && section['.name'] !== 'loopback') {
+				var exists = interfaces.some(function(iface) {
+					return iface.name === section['.name'];
+				});
+				if (!exists) {
+					interfaces.push({
+						name: section['.name'],
+						ip: section.ipaddr || '',
+						display: section['.name'].toUpperCase()
+					});
+				}
+			}
+		});
+
+		return interfaces;
+	},
+
+	// 입력인터페이스 드롭다운 업데이트
+	updateInterfaceDropdown: function() {
+		var interfaceSelect = document.querySelector('select[data-uci="src"]');
+		if (interfaceSelect) {
+			var options = this.createInterfaceOptions();
+			interfaceSelect.innerHTML = '';
+			options.forEach(function(option) {
+				var optionElement = E('option', { 'value': option.value }, option.label);
+				interfaceSelect.appendChild(optionElement);
+			});
+		}
+	},
+
+	// Stateful Inspection 옵션 토글 함수
+	toggleStatefulOptions: function() {
+		var statefulCheckbox = document.getElementById('stateful-main');
+		var statefulOptions = document.getElementById('stateful-options');
+		
+		if (statefulCheckbox && statefulOptions) {
+			if (statefulCheckbox.checked) {
+				statefulOptions.style.display = 'flex';
+				console.log('Stateful options shown');
+			} else {
+				statefulOptions.style.display = 'none';
+				// 메인 체크박스가 해제되면 모든 세부 옵션도 해제
+				var detailCheckboxes = statefulOptions.querySelectorAll('input[type="checkbox"]');
+				detailCheckboxes.forEach(function(checkbox) {
+					checkbox.checked = false;
+				});
+				console.log('Stateful options hidden and cleared');
+			}
+		}
+	},
+
+	applyIPCategoriesToUI: function(ipCategories) {
+		this.currentIPCategories = ipCategories;
+		
+		// 출발지 IP 타입 드롭다운 업데이트
+		var srcTypeSelect = document.getElementById('src-ip-type');
+		if (srcTypeSelect) {
+			var typeOptions = this.createIPTypeOptions(ipCategories);
+			srcTypeSelect.innerHTML = '';
+			typeOptions.forEach(function(option) {
+				var optionElement = E('option', { 'value': option.value }, option.label);
+				srcTypeSelect.appendChild(optionElement);
+			});
+		}
+
+		// 목적지 IP 타입 드롭다운 업데이트  
+		var destTypeSelect = document.getElementById('dest-ip-type');
+		if (destTypeSelect) {
+			var typeOptions = this.createIPTypeOptions(ipCategories);
+			destTypeSelect.innerHTML = '';
+			typeOptions.forEach(function(option) {
+				var optionElement = E('option', { 'value': option.value }, option.label);
+				destTypeSelect.appendChild(optionElement);
+			});
+		}
+	},
+
+	// UCI 설정과 Rule Config UI 연결을 위한 헬퍼 함수들
+	initRuleConfigBindings: function() {
+		var self = this;
+		
+		// 현재 편집 중인 rule section ID
+		this.currentRuleSection = null;
+		
+		// Form Map에 변경사항을 직접 등록하는 함수
+		this.registerFormChanges = function(formMap) {
+			console.log('registerFormChanges called with formMap:', formMap);
+			
+			if (!formMap || !self.currentRuleSection) {
+				console.log('No formMap or currentRuleSection available');
+				return;
+			}
+			
+			try {
+				// Form Map의 변경사항 추적 시스템에 직접 등록
+				if (formMap.data && typeof formMap.data === 'object') {
+					// UCI 변경사항을 Form 데이터에 반영
+					if (!formMap.data[self.currentRuleSection]) {
+						formMap.data[self.currentRuleSection] = {};
+					}
+					
+					// 현재 Rule Config의 값들을 Form 데이터에 복사
+					var container = document.getElementById('rule-config');
+					if (container) {
+						// enabled 값 복사
+						var enabledCheckbox = container.querySelector('input[data-uci="enabled"]');
+						if (enabledCheckbox) {
+							formMap.data[self.currentRuleSection].enabled = enabledCheckbox.checked ? '1' : '0';
+						}
+						
+						// target 값 복사  
+						var targetSelect = container.querySelector('select[data-uci="target"]');
+						if (targetSelect) {
+							formMap.data[self.currentRuleSection].target = targetSelect.value;
+						}
+						
+						// proto 값 복사
+						var protoSelect = container.querySelector('select[data-uci="proto"]');
+						if (protoSelect) {
+							formMap.data[self.currentRuleSection].proto = protoSelect.value;
+						}
+						
+						// src 값 복사
+						var srcSelect = container.querySelector('select[data-uci="src"]');
+						if (srcSelect) {
+							formMap.data[self.currentRuleSection].src = srcSelect.value;
+						}
+						
+						// priority 값 복사
+						var priorityInput = container.querySelector('input[data-uci="priority"]');
+						if (priorityInput) {
+							formMap.data[self.currentRuleSection].priority = priorityInput.value;
+						}
+						
+						// comment 값 복사
+						var commentInput = container.querySelector('input[data-uci="comment"]');
+						if (commentInput) {
+							formMap.data[self.currentRuleSection].comment = commentInput.value;
+						}
+						
+						// Stateful Inspection 값들 복사
+						var statefulEnabled = container.querySelector('input[data-uci="stateful_enabled"]');
+						if (statefulEnabled) {
+							formMap.data[self.currentRuleSection].stateful_enabled = statefulEnabled.checked;
+						}
+						
+						var statefulNew = container.querySelector('input[data-uci="stateful_new"]');
+						if (statefulNew) {
+							formMap.data[self.currentRuleSection].stateful_new = statefulNew.checked;
+						}
+						
+						var statefulEstablished = container.querySelector('input[data-uci="stateful_established"]');
+						if (statefulEstablished) {
+							formMap.data[self.currentRuleSection].stateful_established = statefulEstablished.checked;
+						}
+						
+						var statefulRelated = container.querySelector('input[data-uci="stateful_related"]');
+						if (statefulRelated) {
+							formMap.data[self.currentRuleSection].stateful_related = statefulRelated.checked;
+						}
+						
+						var statefulInvalid = container.querySelector('input[data-uci="stateful_invalid"]');
+						if (statefulInvalid) {
+							formMap.data[self.currentRuleSection].stateful_invalid = statefulInvalid.checked;
+						}
+						
+						// IP 주소 값들을 즉시 처리하여 Form에 반영
+						self.saveIPAddress('src');
+						self.saveIPAddress('dest');
+						
+						// 모든 설정을 즉시 UCI에도 저장
+						if (enabledCheckbox) {
+							uci.set('firewall', self.currentRuleSection, 'enabled', enabledCheckbox.checked ? '1' : '0');
+						}
+						if (targetSelect && targetSelect.value) {
+							uci.set('firewall', self.currentRuleSection, 'target', targetSelect.value);
+						}
+						if (protoSelect && protoSelect.value) {
+							uci.set('firewall', self.currentRuleSection, 'proto', protoSelect.value);
+						}
+						if (srcSelect && srcSelect.value !== '') {
+							uci.set('firewall', self.currentRuleSection, 'src', srcSelect.value);
+						}
+						if (priorityInput && priorityInput.value.trim()) {
+							uci.set('firewall', self.currentRuleSection, 'name', priorityInput.value.trim());
+						}
+						if (commentInput && commentInput.value.trim()) {
+							uci.set('firewall', self.currentRuleSection, 'comment', commentInput.value.trim());
+						}
+						
+						// Stateful Inspection UCI 저장
+						if (statefulEnabled) {
+							if (statefulEnabled.checked) {
+								uci.set('firewall', self.currentRuleSection, 'extra', '-m conntrack');
+								
+								// 선택된 상태들을 배열로 수집
+								var states = [];
+								if (statefulNew && statefulNew.checked) states.push('NEW');
+								if (statefulEstablished && statefulEstablished.checked) states.push('ESTABLISHED');
+								if (statefulRelated && statefulRelated.checked) states.push('RELATED');
+								if (statefulInvalid && statefulInvalid.checked) states.push('INVALID');
+								
+								if (states.length > 0) {
+									uci.set('firewall', self.currentRuleSection, 'extra', '-m conntrack --ctstate ' + states.join(','));
+								}
+							} else {
+								uci.unset('firewall', self.currentRuleSection, 'extra');
+							}
+						}
+						
+						// 처리된 IP 주소를 Form 데이터에도 복사
+						var srcIP = uci.get('firewall', self.currentRuleSection, 'src_ip');
+						if (srcIP) {
+							formMap.data[self.currentRuleSection].src_ip = srcIP;
+						}
+						
+						var destIP = uci.get('firewall', self.currentRuleSection, 'dest_ip');
+						if (destIP) {
+							formMap.data[self.currentRuleSection].dest_ip = destIP;
+						}
+					}
+					
+					console.log('Form data updated:', formMap.data[self.currentRuleSection]);
+				}
+				
+				// Form Map의 변경 플래그 설정
+				if (typeof formMap.checkDepends === 'function') {
+					formMap.checkDepends();
+				}
+				
+				// UI 변경 지시자 설정
+				if (typeof ui !== 'undefined' && ui.changes) {
+					ui.changes.setIndicator(true);
+				}
+				
+				console.log('Form changes registered successfully');
+			} catch (err) {
+				console.error('Error registering form changes:', err);
+			}
+		};
+		
+		// Rule Config 폼 데이터를 UCI에 저장
+		this.saveRuleConfig = function() {
+			console.log('🔥🔥🔥 [FIREWALL-DEBUG] ===============================');
+			console.log('🔥🔥🔥 [FIREWALL-DEBUG] SAVE RULE CONFIG FUNCTION CALLED!');
+			console.log('🔥🔥🔥 [FIREWALL-DEBUG] ===============================');
+			console.log('saveRuleConfig called');
+			
+			if (!self.currentRuleSection) {
+				// 새 rule section 생성
+				self.currentRuleSection = uci.add('firewall', 'rule');
+				console.log('Created new rule section:', self.currentRuleSection);
+				// 새 섹션 생성 시 즉시 변경사항 감지
+				self.forceChangeDetection();
+			}
+			
+			var container = document.getElementById('rule-config');
+			if (!container) {
+				console.log('Rule config container not found');
+				return Promise.resolve();
+			}
+			
+			// 우선순위 매핑 (option name으로 저장) - 맨 먼저 설정하여 제일 위에 나타나도록
+			var priorityInput = container.querySelector('input[data-uci="priority"]');
+			if (priorityInput && priorityInput.value.trim()) {
+				var nameValue = priorityInput.value.trim();
+				uci.set('firewall', self.currentRuleSection, 'name', nameValue);
+				console.log('Set name (from priority):', nameValue);
+			} else {
+				console.log('Priority input not found or empty');
+			}
+			
+			// 사용여부 매핑 (option enabled)
+			var enabledCheckbox = container.querySelector('input[data-uci="enabled"]');
+			if (enabledCheckbox) {
+				var enabledValue = enabledCheckbox.checked ? '1' : '0';
+				uci.set('firewall', self.currentRuleSection, 'enabled', enabledValue);
+				console.log('Set enabled:', enabledValue);
+			} else {
+				console.log('Enabled checkbox not found');
+			}
+			
+			// 행위 매핑 (option target) - 원본과 동일한 처리
+			var targetSelect = container.querySelector('select[data-uci="target"]');
+			if (targetSelect && targetSelect.value) {
+				var targetValue = targetSelect.value;
+				console.log('Target select found, value:', targetValue);
+				// MARK_SET, MARK_XOR는 MARK로 변환 (원본 로직과 동일)
+				if (targetValue === 'MARK_SET' || targetValue === 'MARK_XOR') {
+					uci.set('firewall', self.currentRuleSection, 'target', 'MARK');
+					if (targetValue === 'MARK_SET') {
+						uci.set('firewall', self.currentRuleSection, 'set_mark', '1');
+					}
+					console.log('Set target to MARK with set_mark');
+				} else {
+					uci.set('firewall', self.currentRuleSection, 'target', targetValue);
+					console.log('Set target:', targetValue);
+				}
+			} else {
+				console.log('Target select not found or empty');
+			}
+			
+			// 프로토콜 매핑 (option proto)
+			var protoSelect = container.querySelector('select[data-uci="proto"]');
+			if (protoSelect && protoSelect.value) {
+				var protoValue = protoSelect.value;
+				// 'all'을 적절한 형태로 변환
+				if (protoValue === 'all') {
+					protoValue = 'tcp udp';
+				}
+				uci.set('firewall', self.currentRuleSection, 'proto', protoValue);
+				console.log('Set proto:', protoValue);
+			} else {
+				console.log('Proto select not found or empty');
+			}
+			
+			// 입력인터페이스 매핑 (option src)
+			var srcSelect = container.querySelector('select[data-uci="src"]');
+			if (srcSelect && srcSelect.value !== '') {
+				uci.set('firewall', self.currentRuleSection, 'src', srcSelect.value);
+				console.log('Set src:', srcSelect.value);
+			} else {
+				console.log('Src select not found or empty');
+			}
+			
+			// 주석 매핑 (option comment)
+			var commentInput = container.querySelector('input[data-uci="comment"]');
+			if (commentInput && commentInput.value.trim()) {
+				uci.set('firewall', self.currentRuleSection, 'comment', commentInput.value.trim());
+				console.log('Set comment:', commentInput.value.trim());
+			} else {
+				console.log('Comment input not found or empty');
+			}
+			
+			// Stateful Inspection 매핑 (option extra)
+			var statefulEnabled = container.querySelector('input[data-uci="stateful_enabled"]');
+			if (statefulEnabled && statefulEnabled.checked) {
+				// 선택된 상태들을 배열로 수집
+				var states = [];
+				var statefulNew = container.querySelector('input[data-uci="stateful_new"]');
+				var statefulEstablished = container.querySelector('input[data-uci="stateful_established"]');
+				var statefulRelated = container.querySelector('input[data-uci="stateful_related"]');
+				var statefulInvalid = container.querySelector('input[data-uci="stateful_invalid"]');
+				
+				if (statefulNew && statefulNew.checked) states.push('NEW');
+				if (statefulEstablished && statefulEstablished.checked) states.push('ESTABLISHED');
+				if (statefulRelated && statefulRelated.checked) states.push('RELATED');
+				if (statefulInvalid && statefulInvalid.checked) states.push('INVALID');
+				
+				if (states.length > 0) {
+					var extraValue = '-m conntrack --ctstate ' + states.join(',');
+					uci.set('firewall', self.currentRuleSection, 'extra', extraValue);
+					console.log('Set stateful inspection:', extraValue);
+				} else {
+					uci.set('firewall', self.currentRuleSection, 'extra', '-m conntrack');
+					console.log('Set basic conntrack without states');
+				}
+			} else {
+				uci.unset('firewall', self.currentRuleSection, 'extra');
+				console.log('Stateful inspection disabled, removed extra option');
+			}
+			
+			// IP 주소 조합 및 저장 (option src_ip, dest_ip)
+			self.saveIPAddress('src');
+			self.saveIPAddress('dest');
+			
+			// Time Restrictions 저장 (기존 timed 탭 로직 복사)
+			self.saveTimeRestrictions();
+			
+			// 저장하기 전에 유효한 데이터가 있는지 확인 (완화된 조건)
+			var hasValidData = true; // 기본적으로 저장하도록 변경
+			var container = document.getElementById('rule-config');
+			if (container) {
+				var enabledCheckbox = container.querySelector('input[data-uci="enabled"]');
+				var targetSelect = container.querySelector('select[data-uci="target"]');
+				var protoSelect = container.querySelector('select[data-uci="proto"]');
+				var priorityInput = container.querySelector('input[data-uci="priority"]');
+				var ipInputs = container.querySelectorAll('input[data-uci="src_ip"], input[data-uci="dest_ip"]');
+				
+				// 최소한 하나의 의미있는 값이 있으면 저장
+				hasValidData = (enabledCheckbox && enabledCheckbox.checked) ||
+					(targetSelect && targetSelect.value) ||
+					(protoSelect && protoSelect.value) ||
+					(priorityInput && priorityInput.value.trim()) ||
+					Array.from(ipInputs).some(input => input.value.trim() !== '');
+					
+				console.log('Validation check - hasValidData:', hasValidData);
+				console.log('- enabled:', enabledCheckbox ? enabledCheckbox.checked : 'not found');
+				console.log('- target:', targetSelect ? targetSelect.value : 'not found');
+				console.log('- proto:', protoSelect ? protoSelect.value : 'not found');
+				console.log('- priority:', priorityInput ? priorityInput.value : 'not found');
+			}
+			
+			if (!hasValidData) {
+				console.log('No valid data to save, skipping');
+				return Promise.resolve();
+			}
+			
+			// Rule 이름이 설정되지 않은 경우에만 기본값 설정
+			var currentName = uci.get('firewall', self.currentRuleSection, 'name');
+			if (!currentName) {
+				uci.set('firewall', self.currentRuleSection, 'name', 'Rule ' + Date.now());
+				console.log('Set default name for rule');
+			}
+			
+			console.log('🔥 [FIREWALL-DEBUG] Preparing to save UCI changes...');
+			console.log('🔥 [FIREWALL-DEBUG] Current rule section:', self.currentRuleSection);
+			console.log('🔥 [FIREWALL-DEBUG] Timestamp:', new Date().toISOString());
+			
+			// 저장 후 정렬 작업 수행
+			return uci.save().then(function() {
+				console.log('🔥 [FIREWALL-DEBUG] UCI save completed, now performing sorting...');
+				// 저장 후에 정렬 실행
+				return self.performFirewallSorting();
+			}).then(function() {
+				console.log('🔥 [FIREWALL-DEBUG] All operations completed successfully');
+				console.log('🔥 [FIREWALL-DEBUG] Final firewall sections:');
+				var finalSections = uci.sections('firewall');
+				finalSections.forEach(function(section, index) {
+					console.log('🔥 [FIREWALL-DEBUG] Section', index + ':', section['.type'], 
+						section['.name'] || 'unnamed', 
+						section.name || '', 
+						'index:', section['.index']);
+				});
+				return Promise.resolve();
+			}).catch(function(err) {
+				console.error('🔥 [FIREWALL-DEBUG] ❌ Operation failed:', err);
+				console.error('🔥 [FIREWALL-DEBUG] Error stack:', err.stack);
+				return Promise.reject(err);
+			});
+		};
+		
+		// Time Restrictions 저장 함수 (기존 timed 탭 로직 복사)
+		this.saveTimeRestrictions = function() {
+			var container = document.getElementById('rule-config');
+			if (!container || !self.currentRuleSection) return;
+
+			// Week Days 저장 (기존 로직 복사)
+			var weekdayCheckboxes = container.querySelectorAll('input[data-uci="weekdays"]:checked');
+			var weekdays = Array.from(weekdayCheckboxes).map(cb => cb.value);
+			if (weekdays.length > 0) {
+				uci.set('firewall', self.currentRuleSection, 'weekdays', weekdays.join(' '));
+				console.log('Set weekdays:', weekdays.join(' '));
+			} else {
+				uci.unset('firewall', self.currentRuleSection, 'weekdays');
+			}
+
+			// Month Days 저장 (기존 로직 복사)
+			var monthdayCheckboxes = container.querySelectorAll('input[data-uci="monthdays"]:checked');
+			var monthdays = Array.from(monthdayCheckboxes).map(cb => cb.value);
+			if (monthdays.length > 0) {
+				uci.set('firewall', self.currentRuleSection, 'monthdays', monthdays.join(' '));
+				console.log('Set monthdays:', monthdays.join(' '));
+			} else {
+				uci.unset('firewall', self.currentRuleSection, 'monthdays');
+			}
+
+			// Start/Stop Time 저장
+			var startTimeInput = container.querySelector('input[data-uci="start_time"]');
+			var stopTimeInput = container.querySelector('input[data-uci="stop_time"]');
+			if (startTimeInput && startTimeInput.value) {
+				uci.set('firewall', self.currentRuleSection, 'start_time', startTimeInput.value);
+				console.log('Set start_time:', startTimeInput.value);
+			} else {
+				uci.unset('firewall', self.currentRuleSection, 'start_time');
+			}
+			if (stopTimeInput && stopTimeInput.value) {
+				uci.set('firewall', self.currentRuleSection, 'stop_time', stopTimeInput.value);
+				console.log('Set stop_time:', stopTimeInput.value);
+			} else {
+				uci.unset('firewall', self.currentRuleSection, 'stop_time');
+			}
+
+			// Start/Stop Date 저장
+			var startDateInput = container.querySelector('input[data-uci="start_date"]');
+			var stopDateInput = container.querySelector('input[data-uci="stop_date"]');
+			if (startDateInput && startDateInput.value) {
+				uci.set('firewall', self.currentRuleSection, 'start_date', startDateInput.value);
+				console.log('Set start_date:', startDateInput.value);
+			} else {
+				uci.unset('firewall', self.currentRuleSection, 'start_date');
+			}
+			if (stopDateInput && stopDateInput.value) {
+				uci.set('firewall', self.currentRuleSection, 'stop_date', stopDateInput.value);
+				console.log('Set stop_date:', stopDateInput.value);
+			} else {
+				uci.unset('firewall', self.currentRuleSection, 'stop_date');
+			}
+		};
+		
+		// IP 주소 4개 필드를 조합하여 점 형태로 저장 (수정된 방식)
+		this.saveIPAddress = function(type) {
+			var container = document.getElementById('rule-config');
+			var ipInputs = container.querySelectorAll(`input[data-uci="${type}_ip"]`);
+			var maskInputs = container.querySelectorAll(`input[data-uci="${type}_mask"]`);
+			
+			console.log(`saveIPAddress for ${type}: found ${ipInputs.length} IP inputs, ${maskInputs.length} mask inputs`);
+			
+			if (ipInputs.length === 4) {
+				// IP 주소 조합
+				var ipParts = Array.from(ipInputs).map(input => {
+					var value = input.value.trim();
+					return value === '' ? '0' : value;
+				});
+				var ip = ipParts.join('.');
+				
+				console.log(`${type} IP parts:`, ipParts, 'Combined IP:', ip);
+				
+				// 유효한 IP인지 확인 (모두 0이 아닌 경우)
+				var isValidIP = ipParts.some(part => part !== '0') && 
+					ipParts.every(part => {
+						var num = parseInt(part);
+						return !isNaN(num) && num >= 0 && num <= 255;
+					});
+				
+				if (isValidIP) {
+					// 방화벽 설정에서는 src_ip, dest_ip를 배열로 저장
+					console.log(`Setting ${type}_ip to:`, ip);
+					uci.unset('firewall', self.currentRuleSection, type + '_ip');  // 기존 값 제거
+					uci.set('firewall', self.currentRuleSection, type + '_ip', [ip]);  // 배열로 설정
+				} else {
+					console.log(`Invalid or empty IP for ${type}, not saving`);
+				}
+				
+				// 넷마스크 처리 (있는 경우)
+				if (maskInputs.length === 4) {
+					var maskParts = Array.from(maskInputs).map(input => {
+						var value = input.value.trim();
+						return value === '' ? '0' : value;
+					});
+					var mask = maskParts.join('.');
+					
+					// 유효한 넷마스크인지 확인 (모두 0이 아닌 경우)
+					var isValidMask = maskParts.some(part => part !== '0') && 
+						maskParts.every(part => {
+							var num = parseInt(part);
+							return !isNaN(num) && num >= 0 && num <= 255;
+						});
+					
+					if (isValidMask) {
+						console.log(`Setting ${type}_netmask to:`, mask);
+						uci.set('firewall', self.currentRuleSection, type + '_netmask', mask);
+					}
+				}
+			}
+		};
+		
+		// UCI에서 Rule Config 폼으로 데이터 로드
+		this.loadRuleConfig = function(sectionId) {
+			self.currentRuleSection = sectionId;
+			var container = document.getElementById('rule-config');
+			if (!container) return;
+			
+			// enabled 설정 로드
+			var enabled = uci.get('firewall', sectionId, 'enabled');
+			var enabledCheckbox = container.querySelector('input[data-uci="enabled"]');
+			if (enabledCheckbox) {
+				enabledCheckbox.checked = (enabled === '1');
+			}
+			
+			// target 설정 로드
+			var target = uci.get('firewall', sectionId, 'target');
+			var targetSelect = container.querySelector('select[data-uci="target"]');
+			if (targetSelect && target) {
+				targetSelect.value = target;
+			}
+			
+			// proto 설정 로드
+			var proto = uci.get('firewall', sectionId, 'proto');
+			var protoSelect = container.querySelector('select[data-uci="proto"]');
+			if (protoSelect && proto) {
+				protoSelect.value = (proto === 'all') ? 'ANY' : proto;
+			}
+			
+			// name(우선순위) 설정 로드
+			var name = uci.get('firewall', sectionId, 'name');
+			var priorityInput = container.querySelector('input[data-uci="priority"]');
+			if (priorityInput && name) {
+				priorityInput.value = name;
+			}
+			
+			// comment 설정 로드
+			var comment = uci.get('firewall', sectionId, 'comment');
+			var commentInput = container.querySelector('input[data-uci="comment"]');
+			if (commentInput && comment) {
+				commentInput.value = comment;
+			}
+			
+			// Stateful Inspection 설정 로드
+			var extra = uci.get('firewall', sectionId, 'extra');
+			var statefulMain = container.querySelector('input[data-uci="stateful_enabled"]');
+			var statefulNew = container.querySelector('input[data-uci="stateful_new"]');
+			var statefulEstablished = container.querySelector('input[data-uci="stateful_established"]');
+			var statefulRelated = container.querySelector('input[data-uci="stateful_related"]');
+			var statefulInvalid = container.querySelector('input[data-uci="stateful_invalid"]');
+			
+			if (extra && extra.indexOf('conntrack') !== -1) {
+				if (statefulMain) {
+					statefulMain.checked = true;
+					// 토글 기능 실행하여 세부 옵션 표시
+					self.toggleStatefulOptions();
+				}
+				
+				// ctstate 파라미터에서 상태들 파싱
+				if (extra.indexOf('--ctstate') !== -1) {
+					var stateMatch = extra.match(/--ctstate\s+([A-Z,]+)/);
+					if (stateMatch) {
+						var states = stateMatch[1].split(',');
+						states.forEach(function(state) {
+							switch(state.trim()) {
+								case 'NEW':
+									if (statefulNew) statefulNew.checked = true;
+									break;
+								case 'ESTABLISHED':
+									if (statefulEstablished) statefulEstablished.checked = true;
+									break;
+								case 'RELATED':
+									if (statefulRelated) statefulRelated.checked = true;
+									break;
+								case 'INVALID':
+									if (statefulInvalid) statefulInvalid.checked = true;
+									break;
+							}
+						});
+					}
+				}
+			} else {
+				// Stateful inspection이 비활성화된 경우
+				if (statefulMain) {
+					statefulMain.checked = false;
+					self.toggleStatefulOptions();
+				}
+			}
+			
+			// IP 주소 로드
+			self.loadIPAddress('src', sectionId);
+			self.loadIPAddress('dest', sectionId);
+		};
+		
+		// 점 형태의 IP를 4개 필드로 분할하여 로드 (원래 방식 유지)
+		this.loadIPAddress = function(type, sectionId) {
+			var container = document.getElementById('rule-config');
+			var ip = uci.get('firewall', sectionId, type + '_ip');
+			var mask = uci.get('firewall', sectionId, type + '_netmask');
+			
+			if (ip) {
+				// IP 주소를 4개 필드에 설정
+				var ipParts = ip.split('.');
+				var ipInputs = container.querySelectorAll(`input[data-uci="${type}_ip"]`);
+				ipInputs.forEach((input, index) => {
+					input.value = ipParts[index] || '';
+				});
+			}
+			
+			if (mask) {
+				// 넷마스크를 4개 필드에 설정
+				var maskParts = mask.split('.');
+				var maskInputs = container.querySelectorAll(`input[data-uci="${type}_mask"]`);
+				maskInputs.forEach((input, index) => {
+					input.value = maskParts[index] || '';
+				});
+			}
+		};
+		
+		// Rule 옵션 순서를 재조정하는 함수 (name을 맨 앞에)
+		this.reorderRuleOptions = function() {
+			console.log('🔧 [FIREWALL-DEBUG] Starting reorderRuleOptions');
+			console.log('🔧 [FIREWALL-DEBUG] Current rule section:', self.currentRuleSection);
+			
+			if (!self.currentRuleSection) {
+				console.log('🔧 [FIREWALL-DEBUG] ⚠️ No current rule section to reorder');
+				return Promise.resolve();
+			}
+			
+			// 현재 rule의 모든 옵션 값 백업
+			var section = uci.get('firewall', self.currentRuleSection);
+			console.log('🔧 [FIREWALL-DEBUG] Retrieved section data:', section);
+			
+			if (!section) {
+				console.log('🔧 [FIREWALL-DEBUG] ❌ Rule section not found:', self.currentRuleSection);
+				return Promise.resolve();
+			}
+			
+			// rule section을 제거하고 다시 생성
+			console.log('🔧 [FIREWALL-DEBUG] Removing old section:', self.currentRuleSection);
+			uci.remove('firewall', self.currentRuleSection);
+			
+			console.log('🔧 [FIREWALL-DEBUG] Adding new rule section...');
+			var newSid = uci.add('firewall', 'rule');
+			console.log('🔧 [FIREWALL-DEBUG] New section ID:', newSid);
+			
+			// 원하는 순서로 옵션 설정
+			var orderedOptions = [
+				'name',      // 우선순위 (맨 앞)
+				'enabled',   // 사용여부
+				'target',    // 행위
+				'proto',     // 프로토콜
+				'src',       // 출발지 zone
+				'src_ip',    // 출발지 IP
+				'src_netmask', // 출발지 넷마스크
+				'src_port',  // 출발지 포트
+				'dest',      // 목적지 zone  
+				'dest_ip',   // 목적지 IP
+				'dest_netmask', // 목적지 넷마스크
+				'dest_port', // 목적지 포트
+				'extra',     // Stateful Inspection
+				'comment'    // 주석 (맨 마지막)
+			];
+			
+			console.log('🔧 [FIREWALL-DEBUG] Setting ordered options...');
+			// 순서대로 옵션 설정
+			orderedOptions.forEach(function(optionName) {
+				if (section[optionName] !== undefined) {
+					uci.set('firewall', newSid, optionName, section[optionName]);
+					console.log('🔧 [FIREWALL-DEBUG] Set ordered option:', optionName, '=', section[optionName]);
+				}
+			});
+			
+			console.log('🔧 [FIREWALL-DEBUG] Setting additional options...');
+			// 순서에 없는 다른 옵션들도 추가
+			Object.keys(section).forEach(function(key) {
+				if (key.indexOf('.') !== 0 && orderedOptions.indexOf(key) === -1) {
+					uci.set('firewall', newSid, key, section[key]);
+					console.log('🔧 [FIREWALL-DEBUG] Set additional option:', key, '=', section[key]);
+				}
+			});
+			
+			// 새로운 section ID 업데이트
+			self.currentRuleSection = newSid;
+			console.log('🔧 [FIREWALL-DEBUG] ✅ Rule options reordered, new section ID:', newSid);
+			
+			// 저장은 메인 함수에서 처리하므로 여기서는 하지 않음
+			console.log('🔧 [FIREWALL-DEBUG] Rule reordering completed (save will be done later)');
+			return Promise.resolve();
+		};
+		
+		// PBR include를 파일 맨 아래로 이동시키는 함수
+		this.movePBRIncludeToBottom = function() {
+			console.log('Moving PBR include to bottom of firewall config');
+			
+			// firewall 설정의 모든 섹션 가져오기
+			var sections = uci.sections('firewall');
+			var pbrIncludeSections = [];
+			var otherSections = [];
+			
+			// PBR include 섹션과 다른 섹션들 분리
+			sections.forEach(function(section) {
+				if (section['.type'] === 'include' && 
+					(section['.name'] === 'pbr' || 
+					 section.path === '/usr/share/pbr/firewall.include' ||
+					 section['.name'].indexOf('pbr') !== -1)) {
+					pbrIncludeSections.push(section);
+				} else {
+					otherSections.push(section);
+				}
+			});
+			
+			console.log('Found PBR include sections:', pbrIncludeSections.length);
+			console.log('Found other sections:', otherSections.length);
+			
+			// PBR include 섹션이 있으면 재배치
+			if (pbrIncludeSections.length > 0) {
+				// PBR include 섹션들을 임시로 제거
+				pbrIncludeSections.forEach(function(section) {
+					console.log('Removing PBR section temporarily:', section['.name']);
+					uci.remove('firewall', section['.name']);
+				});
+				
+				// PBR include 섹션들을 다시 추가 (맨 마지막에 추가됨)
+				pbrIncludeSections.forEach(function(section) {
+					console.log('Re-adding PBR section at bottom:', section['.name']);
+					var newSid = uci.add('firewall', 'include');
+					
+					// 원본 데이터 복사
+					Object.keys(section).forEach(function(key) {
+						if (key !== '.type' && key !== '.name' && key !== '.anonymous') {
+							uci.set('firewall', newSid, key, section[key]);
+						}
+					});
+					
+					// 특정 PBR 속성들 설정
+					if (section['.name'] === 'pbr' || section.path === '/usr/share/pbr/firewall.include') {
+						uci.set('firewall', newSid, 'fw4_compatible', '0');
+						uci.set('firewall', newSid, 'type', 'script');
+						uci.set('firewall', newSid, 'path', '/usr/share/pbr/firewall.include');
+					}
+				});
+				
+				console.log('PBR include sections moved to bottom');
+				
+				// 변경사항 저장
+				return uci.save().then(function() {
+					console.log('PBR repositioning completed');
+					return Promise.resolve();
+				}).catch(function(err) {
+					console.error('Failed to save PBR repositioning:', err);
+					return Promise.resolve(); // 실패해도 계속 진행
+				});
+			} else {
+				console.log('No PBR include sections found');
+				return Promise.resolve();
+			}
+		};
+		
+		// rule 섹션들을 name에 따라 정렬하는 함수 (규칙 정렬에만 집중) - 사용하지 않음
+		/*this.sortRulesByName = function() {
+			console.log('📋 [FIREWALL-DEBUG] Starting sortRulesByName - Rules only');
+			
+			// firewall 설정의 모든 섹션 가져오기
+			var allSections = uci.sections('firewall');
+			console.log('📋 [FIREWALL-DEBUG] Total sections found:', allSections.length);
+			
+			var ruleSections = [];
+			var nonRuleSections = [];
+			
+			// 섹션들을 타입별로 분리 (PBR 제외)
+			allSections.forEach(function(section) {
+				console.log('📋 [FIREWALL-DEBUG] Processing section:', section['.type'], section['.name'] || 'unnamed', 'name:', section.name || 'none');
+				
+				if (section['.type'] === 'rule') {
+					ruleSections.push(section);
+				} else {
+					nonRuleSections.push(section);
+				}
+			});
+			
+			console.log('📋 [FIREWALL-DEBUG] Section breakdown - Rules:', ruleSections.length, 'Non-rules:', nonRuleSections.length);
+			console.log('📋 [FIREWALL-DEBUG] Rule sections details:');
+			ruleSections.forEach(function(rule, index) {
+				console.log('📋 [FIREWALL-DEBUG]   Rule', index + ':', rule.name || 'unnamed', '(', rule['.name'], ')');
+			});
+			
+			// rule이 2개 이상 있을 때만 정렬
+			if (ruleSections.length > 1) {
+				// rule 섹션들을 name에 따라 정렬 (알파벳/숫자 순)
+				var sortedRules = ruleSections.slice().sort(function(a, b) {
+					var nameA = (a.name || '').toString().toLowerCase();
+					var nameB = (b.name || '').toString().toLowerCase();
+					
+					// 숫자인지 확인
+					var isNumA = !isNaN(nameA) && !isNaN(parseFloat(nameA));
+					var isNumB = !isNaN(nameB) && !isNaN(parseFloat(nameB));
+					
+					// 둘 다 숫자면 숫자로 비교
+					if (isNumA && isNumB) {
+						return parseFloat(nameA) - parseFloat(nameB);
+					}
+					
+					// 하나만 숫자면 숫자를 먼저 
+					if (isNumA && !isNumB) return -1;
+					if (!isNumA && isNumB) return 1;
+					
+					// 둘 다 문자면 알파벳 순
+					return nameA.localeCompare(nameB);
+				});
+				
+				console.log('Current rule order:', ruleSections.map(function(r) { return r.name || 'unnamed'; }));
+				console.log('Target rule order:', sortedRules.map(function(r) { return r.name || 'unnamed'; }));
+				
+				// 순서가 바뀌었는지 확인
+				var needsReordering = false;
+				for (var i = 0; i < ruleSections.length; i++) {
+					if (ruleSections[i]['.name'] !== sortedRules[i]['.name']) {
+						needsReordering = true;
+						break;
+					}
+				}
+				
+				if (needsReordering) {
+					console.log('📋 [FIREWALL-DEBUG] 🔄 Rules need reordering, using index-based reordering...');
+					
+					// 인덱스 기반 재정렬 사용
+					var currentIndex = 0;
+					
+					// 1. Non-rule 섹션들 먼저
+					nonRuleSections.forEach(function(section) {
+						section['.index'] = currentIndex++;
+						console.log('📋 [FIREWALL-DEBUG] Set index', section['.index'], 'for', section['.type'], 
+							(section.name || section['.name']));
+					});
+					
+					// 2. 정렬된 rule 섹션들
+					sortedRules.forEach(function(section) {
+						section['.index'] = currentIndex++;
+						console.log('📋 [FIREWALL-DEBUG] Set index', section['.index'], 'for rule', section.name);
+					});
+					
+					// 재정렬 플래그 설정
+					uci.state.reorder['firewall'] = true;
+					console.log('📋 [FIREWALL-DEBUG] ✅ Rule reordering completed');
+					return Promise.resolve();
+				} else {
+					console.log('Rules are already in correct order');
+					return Promise.resolve();
+				}
+			} else {
+				console.log('Less than 2 rule sections found, no rule sorting needed');
+				return Promise.resolve();
+			}
+		};*/
+		
+		// 자동 정렬 + PBR 마지막 배치 기능 (설정 가능)
+		this.performFirewallSorting = function() {
+			console.log('🎯 [FIREWALL-DEBUG] ===============================');
+			console.log('🎯 [FIREWALL-DEBUG] PERFORMING FIREWALL SORTING!');
+			console.log('🎯 [FIREWALL-DEBUG] ===============================');
+			
+			// 자동 정렬 활성화/비활성화 설정 (웹 인터페이스에서 가져오기)
+			var enableAutoSort = self.getAutoSortSetting();
+			
+			return Promise.resolve().then(function() {
+				console.log('🎯 [FIREWALL-DEBUG] Step 1: Starting reorderRuleOptions...');
+				return self.reorderRuleOptions();
+			}).then(function() {
+				if (enableAutoSort) {
+					console.log('🎯 [FIREWALL-DEBUG] Step 2: Sorting rules by name and moving PBR to bottom...');
+					return self.sortRulesAndMovePBRToBottom();
+				} else {
+					console.log('🎯 [FIREWALL-DEBUG] Step 2: Skipping rule sorting, only moving PBR to bottom...');
+					return self.movePBRToBottomOnly();
+				}
+			}).then(function() {
+				console.log('🎯 [FIREWALL-DEBUG] Step 3: Saving sorted configuration...');
+				return uci.save();
+			}).then(function() {
+				console.log('🎯 [FIREWALL-DEBUG] ✅ Firewall sorting and save completed!');
+				return Promise.resolve();
+			}).catch(function(err) {
+				console.error('🎯 [FIREWALL-DEBUG] ❌ Firewall sorting failed:', err);
+				return Promise.resolve(); // 실패해도 계속 진행
+			});
+		};
+		
+		// 규칙 정렬 + PBR 마지막 배치 통합 함수 (uci.move() 사용)
+		this.sortRulesAndMovePBRToBottom = function() {
+			console.log('🎯 [FIREWALL-DEBUG] Sorting rules by name and moving PBR to bottom using uci.move()...');
+			
+			// 현재 섹션들 가져오기
+			var allSections = uci.sections('firewall');
+			var pbrSections = [];
+			var ruleSections = [];
+			var otherSections = [];
+			
+			// 섹션들을 타입별로 분리
+			allSections.forEach(function(section) {
+				if (section['.type'] === 'include' && 
+					(section['.name'] === 'pbr' || 
+					 section.path === '/usr/share/pbr/firewall.include' ||
+					 section['.name'].indexOf('pbr') !== -1)) {
+					pbrSections.push(section);
+					console.log('🎯 [FIREWALL-DEBUG] Found PBR section:', section['.name'], section.path);
+				} else if (section['.type'] === 'rule') {
+					ruleSections.push(section);
+				} else {
+					otherSections.push(section);
+				}
+			});
+			
+			console.log('🎯 [FIREWALL-DEBUG] Section counts - Rules:', ruleSections.length, 'PBR:', pbrSections.length, 'Others:', otherSections.length);
+			
+			if (ruleSections.length > 1) {
+				// 규칙들을 이름 순으로 정렬 (커스텀 순서 지원)
+				var sortedRules = ruleSections.slice().sort(function(a, b) {
+					var nameA = (a.name || '').toString().toLowerCase();
+					var nameB = (b.name || '').toString().toLowerCase();
+					
+					// 커스텀 정렬 순서 정의 (원하는 순서대로 배치)
+					var customOrder = [
+						// 숫자 이름들은 숫자 순으로 자동 정렬
+						// 텍스트 이름들의 커스텀 순서를 여기에 정의
+						'my ip',           // 첫 번째로 배치하고 싶은 규칙
+						'vpn access',      // 두 번째로 배치하고 싶은 규칙
+						'lan access',      // 세 번째로 배치하고 싶은 규칙
+						'guest network',   // 네 번째로 배치하고 싶은 규칙
+						// 여기에 더 추가 가능...
+					];
+					
+					// 숫자인지 확인
+					var isNumA = !isNaN(nameA) && !isNaN(parseFloat(nameA));
+					var isNumB = !isNaN(nameB) && !isNaN(parseFloat(nameB));
+					
+					// 둘 다 숫자면 숫자로 비교
+					if (isNumA && isNumB) {
+						return parseFloat(nameA) - parseFloat(nameB);
+					}
+					
+					// 하나만 숫자면 숫자를 먼저 
+					if (isNumA && !isNumB) return -1;
+					if (!isNumA && isNumB) return 1;
+					
+					// 둘 다 문자면 커스텀 순서 또는 알파벳 순
+					var indexA = customOrder.indexOf(nameA);
+					var indexB = customOrder.indexOf(nameB);
+					
+					// 둘 다 커스텀 순서에 있으면 커스텀 순서 사용
+					if (indexA !== -1 && indexB !== -1) {
+						return indexA - indexB;
+					}
+					
+					// 하나만 커스텀 순서에 있으면 그것을 먼저
+					if (indexA !== -1 && indexB === -1) return -1;
+					if (indexA === -1 && indexB !== -1) return 1;
+					
+					// 둘 다 커스텀 순서에 없으면 알파벳 순
+					return nameA.localeCompare(nameB);
+				});
+				
+				// 현재 규칙 순서 로깅
+				var currentOrder = [];
+				for (var k = 0; k < ruleSections.length; k++) {
+					currentOrder.push(ruleSections[k].name || 'unnamed');
+				}
+				console.log('🎯 [FIREWALL-DEBUG] Current rule order:', currentOrder);
+				
+				// 목표 규칙 순서 로깅
+				var targetOrder = [];
+				for (var k = 0; k < sortedRules.length; k++) {
+					targetOrder.push(sortedRules[k].name || 'unnamed');
+				}
+				console.log('🎯 [FIREWALL-DEBUG] Target rule order:', targetOrder);
+				
+				// 정렬이 필요한지 확인
+				var needsReordering = false;
+				for (var i = 0; i < ruleSections.length; i++) {
+					if (ruleSections[i]['.name'] !== sortedRules[i]['.name']) {
+						needsReordering = true;
+						break;
+					}
+				}
+				
+				if (needsReordering) {
+					console.log('🎯 [FIREWALL-DEBUG] Rules need reordering, using uci.move()...');
+					
+					// 마지막 non-rule 섹션 찾기 (규칙들이 그 다음에 위치해야 함)
+					var lastNonRuleSection = null;
+					for (var j = 0; j < allSections.length; j++) {
+						if (allSections[j]['.type'] !== 'rule') {
+							lastNonRuleSection = allSections[j]['.name'];
+						} else {
+							break;
+						}
+					}
+					
+					// 정렬된 순서대로 규칙들을 이동
+					var previousSection = lastNonRuleSection;
+					for (var i = 0; i < sortedRules.length; i++) {
+						var targetRule = sortedRules[i];
+						
+						if (previousSection) {
+							console.log('🎯 [FIREWALL-DEBUG] Moving rule', targetRule.name, 'after', previousSection);
+							uci.move('firewall', targetRule['.name'], previousSection, true);
+						}
+						
+						previousSection = targetRule['.name'];
+					}
+				} else {
+					console.log('🎯 [FIREWALL-DEBUG] Rules are already in correct order');
+				}
+				
+				console.log('🎯 [FIREWALL-DEBUG] ✅ Rule sorting completed');
+			} else {
+				console.log('🎯 [FIREWALL-DEBUG] Less than 2 rules, no rule sorting needed');
+			}
+			
+			// PBR 섹션을 마지막으로 이동
+			if (pbrSections.length > 0) {
+				console.log('🎯 [FIREWALL-DEBUG] Moving PBR sections to bottom...');
+				
+				pbrSections.forEach(function(pbrSection) {
+					// PBR 섹션을 맨 마지막으로 이동
+					console.log('🎯 [FIREWALL-DEBUG] Moving PBR section', pbrSection['.name'], 'to bottom');
+					uci.move('firewall', pbrSection['.name'], null, false);
+				});
+				
+				console.log('🎯 [FIREWALL-DEBUG] ✅ PBR sections moved to bottom');
+			}
+			
+			return Promise.resolve();
+		};
+		
+		// 자동 정렬 설정 가져오기
+		this.getAutoSortSetting = function() {
+			try {
+				var setting = localStorage.getItem('firewall_auto_sort');
+				if (setting === null) {
+					// 기본값: 자동 정렬 활성화
+					return true;
+				}
+				return setting === 'true';
+			} catch (e) {
+				console.log('🎯 [FIREWALL-DEBUG] LocalStorage not available, using default auto-sort: true');
+				return true;
+			}
+		};
+		
+		// 자동 정렬 설정 저장하기
+		this.setAutoSortSetting = function(enabled) {
+			try {
+				localStorage.setItem('firewall_auto_sort', enabled.toString());
+				console.log('🎯 [FIREWALL-DEBUG] Auto-sort setting saved:', enabled);
+			} catch (e) {
+				console.log('🎯 [FIREWALL-DEBUG] Failed to save auto-sort setting');
+			}
+		};
+		
+		// PBR만 마지막으로 이동 (규칙 정렬 없이)
+		this.movePBRToBottomOnly = function() {
+			console.log('🎯 [FIREWALL-DEBUG] Moving PBR to bottom only (preserving rule order)...');
+			
+			var allSections = uci.sections('firewall');
+			var pbrSections = [];
+			
+			// PBR 섹션 찾기
+			allSections.forEach(function(section) {
+				if (section['.type'] === 'include' && 
+					(section['.name'] === 'pbr' || 
+					 section.path === '/usr/share/pbr/firewall.include' ||
+					 section['.name'].indexOf('pbr') !== -1)) {
+					pbrSections.push(section);
+					console.log('🎯 [FIREWALL-DEBUG] Found PBR section:', section['.name'], section.path);
+				}
+			});
+			
+			// PBR 섹션을 마지막으로 이동
+			if (pbrSections.length > 0) {
+				console.log('🎯 [FIREWALL-DEBUG] Moving', pbrSections.length, 'PBR sections to bottom...');
+				
+				pbrSections.forEach(function(pbrSection) {
+					console.log('🎯 [FIREWALL-DEBUG] Moving PBR section', pbrSection['.name'], 'to bottom');
+					uci.move('firewall', pbrSection['.name'], null, false);
+				});
+				
+				console.log('🎯 [FIREWALL-DEBUG] ✅ PBR sections moved to bottom');
+			} else {
+				console.log('🎯 [FIREWALL-DEBUG] No PBR sections found');
+			}
+			
+			return Promise.resolve();
+		};
+	},
+
 	load: function() {
 		return Promise.all([
 			this.callHostHints(),
 			this.callConntrackHelpers(),
-			uci.load('firewall')
+			uci.load('firewall'),
+			uci.load('network')  // 네트워크 인터페이스 정보도 로드
 		]);
 	},
 
@@ -174,14 +1509,8 @@ return view.extend({
 		// CSS 스타일 추가
 		var style = E('style', {}, `
 			.control-container {
-				background: #ffffff;
-				border: 1px solid #d4d4d4;
-				border-radius: 8px;
-				box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15), 0 2px 4px rgba(0, 0, 0, 0.1);
-				margin: 20px;
+				margin: 0;
 				padding: 0;
-				overflow: hidden;
-				position: relative;
 			}
 			.control-header {
 				background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
@@ -210,7 +1539,7 @@ return view.extend({
 				box-shadow: inset 0 -1px 0 rgba(0,0,0,0.1);
 			}
 			.control-tab {
-				padding: 12px 24px;
+				padding: 8px 16px;
 				cursor: pointer;
 				border: 1px solid #dadce0;
 				border-bottom: none;
@@ -222,6 +1551,11 @@ return view.extend({
 				color: #495057;
 				font-weight: 500;
 				box-shadow: 0 -2px 4px rgba(0,0,0,0.1);
+				min-width: 120px;
+				max-width: 120px;
+				flex: 0 0 120px !important;
+				justify-content: center;
+				text-align: center;
 			}
 			.control-tab:hover {
 				background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
@@ -238,21 +1572,37 @@ return view.extend({
 			}
 			.control-content {
 				display: none;
-				padding: 30px;
+				padding: 0px 2px 10px 2px;
 				background: #ffffff;
 				min-height: 400px;
 			}
 			.control-content.active {
 				display: block;
 			}
+			.rule-config-box {
+				background: #ffffff;
+				border: 1px solid #d4d4d4;
+				border-radius: 8px;
+				box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15), 0 2px 4px rgba(0, 0, 0, 0.1);
+				margin: 0;
+				padding: 12px;
+			}
+			.narrow-select {
+				width: 120px !important;
+				min-width: 120px !important;
+				max-width: 120px !important;
+			}
+			.very-narrow-select {
+				width: 80px !important;
+				min-width: 80px !important;
+				max-width: 80px !important;
+			}
 		`);
 
 		// Traffic Rules 생성 (원본 rules.js와 완전히 동일)
-		m = new form.Map('firewall', _('Firewall - Traffic Rules'),
-			_('Traffic rules define policies for packets travelling between different zones, for example to reject traffic between certain hosts or to open WAN ports on the router.'));
-
-		s = m.section(form.GridSection, 'rule', _('Traffic Rules'));
-		s.addremove = false;
+		m = new form.Map('firewall');
+		s = m.section(form.GridSection, 'rule');
+		s.addremove = true;
 		s.anonymous = true;
 		s.sortable  = true;
 		s.cloneable = false;
@@ -582,6 +1932,7 @@ return view.extend({
 		o.modalonly = true;
 		o.default = o.disabled;
 
+		
 		// Traffic Rule 탭 컨테이너를 미리 생성
 		var trafficRuleContainer = E('div', { 'class': 'control-content active', 'id': 'traffic-rule' }, [
 			E('div', {}, _('Loading traffic rules...'))
@@ -594,7 +1945,36 @@ return view.extend({
 			// 헤더 섹션
 			E('div', { 'class': 'control-header' }, [
 				E('h2', {}, _('Firewall - Transmission Control')),
-				E('p', {}, _('Transmission control allows you to configure traffic rules and advanced rule configuration for network transmission management.'))
+				E('p', {}, _('Transmission control allows you to configure traffic rules and advanced rule configuration for network transmission management.')),
+				E('div', { 'style': 'margin-top: 15px; display: flex; align-items: center;' }, [
+					E('label', { 
+						'style': 'margin-right: 10px; color: #495057; font-weight: 500;' 
+					}, _('자동 정렬:')),
+					E('input', { 
+						'type': 'checkbox', 
+						'id': 'auto-sort-checkbox',
+						'checked': true,  // 기본값으로 초기화
+						'style': 'margin-right: 8px;',
+						'change': function() {
+							console.log('🎛️ [FIREWALL-DEBUG] Auto-sort setting changed:', this.checked);
+							self.setAutoSortSetting(this.checked);
+							
+							// 상태 표시 업데이트
+							var statusText = document.getElementById('auto-sort-status');
+							if (statusText) {
+								statusText.textContent = this.checked ? _('활성화') : _('비활성화');
+								statusText.style.color = this.checked ? '#28a745' : '#dc3545';
+							}
+						}
+					}),
+					E('span', { 
+						'id': 'auto-sort-status',
+						'style': 'color: #28a745; font-weight: 500;'  // 기본값으로 초기화
+					}, _('활성화')),
+					E('span', { 
+						'style': 'margin-left: 15px; color: #6c757d; font-size: 13px;' 
+					}, _('(저장 시 규칙을 이름 순으로 자동 정렬합니다)'))
+				])
 			]),
 			
 			// 탭 헤더
@@ -615,162 +1995,527 @@ return view.extend({
 			trafficRuleContainer,
 			
 			// Rule Config 탭 내용 (fire9.png 디자인)
-			E('div', { 'class': 'control-content', 'id': 'rule-config' }, [
-				// 사용여부 줄
-				E('div', { 'style': 'margin-bottom: 15px; display: flex; align-items: center;' }, [
-					E('label', { 'style': 'width: 120px; text-align: right; margin-right: 15px; font-weight: bold;' }, _('사용여부')),
-					E('input', { 'type': 'checkbox', 'style': 'margin-right: 8px;' }),
-					E('span', {}, _('사용'))
-				]),
+			E('div', { 
+				'class': 'control-content', 
+				'id': 'rule-config',
+				'change': function() {
+					// 변경사항 감지하여 저장 버튼 활성화
+					if (typeof ui !== 'undefined' && ui.changes) {
+						ui.changes.setIndicator(true);
+					}
+				}
+			}, [
+				E('div', { 'class': 'rule-config-box' }, [
+					// 사용여부 줄
+					E('div', { 'style': 'margin-bottom: 15px; display: flex; align-items: center;' }, [
+						E('label', { 'style': 'width: 120px; text-align: right; margin-right: 15px; font-weight: bold;' }, _('사용여부')),
+						E('input', { 
+							'type': 'checkbox', 
+							'style': 'margin-right: 8px;', 
+							'data-uci': 'enabled', 
+							'checked': true,
+							'change': function() { 
+								console.log('enabled changed:', this.checked);
+								if (!self.currentRuleSection) {
+									self.currentRuleSection = uci.add('firewall', 'rule');
+									console.log('Created new rule section:', self.currentRuleSection);
+								}
+								self.registerFormChanges(self.formMap);
+							}
+						}),
+						E('span', {}, _('사용'))
+					]),
 
-				// 우선순위, 동작, 입력인터페이스, 로그 줄
-				E('div', { 'style': 'margin-bottom: 15px; display: flex; align-items: center;' }, [
-					E('label', { 'style': 'width: 120px; text-align: right; margin-right: 15px; font-weight: bold;' }, _('우선순위')),
-					E('input', { 'type': 'text', 'value': '1', 'style': 'width: 60px; margin-right: 20px;' }),
-					
-					E('label', { 'style': 'margin-right: 8px; font-weight: bold;' }, _('동작')),
-					E('select', { 'style': 'margin-right: 20px;' }, [
-						E('option', { 'value': 'ACCEPT' }, 'ACCEPT')
+					// 우선순위, 동작, 입력인터페이스, 로그 줄
+					E('div', { 'style': 'margin-bottom: 15px; display: flex; align-items: center;' }, [
+						E('label', { 'style': 'width: 120px; text-align: right; margin-right: 15px;' }, _('')),
+						E('label', { 'style': 'margin-right: 8px;' }, _('우선순위')),
+						E('input', { 
+							'type': 'text', 
+							'value': '1', 
+							'style': 'width: 60px; margin-right: 20px;',
+							'data-uci': 'priority',
+							'change': function() { 
+								console.log('priority changed:', this.value);
+								if (!self.currentRuleSection) {
+									self.currentRuleSection = uci.add('firewall', 'rule');
+									console.log('Created new rule section:', self.currentRuleSection);
+								}
+								self.registerFormChanges(self.formMap);
+							}
+						}),
+						
+						E('label', { 'style': 'margin-right: 8px;' }, _('행위')),
+						E('select', { 
+							'class': 'narrow-select', 
+							'style': 'margin-right: 20px;', 
+							'data-uci': 'target',
+							'change': function() { 
+								console.log('target changed:', this.value);
+								if (!self.currentRuleSection) {
+									self.currentRuleSection = uci.add('firewall', 'rule');
+									console.log('Created new rule section:', self.currentRuleSection);
+								}
+								self.registerFormChanges(self.formMap);
+							}
+						}, [
+							E('option', { 'value': 'ACCEPT', 'selected': true }, 'ACCEPT'),
+							E('option', { 'value': 'DROP' }, 'DROP'),
+							E('option', { 'value': 'REJECT' }, 'REJECT'),
+							E('option', { 'value': 'NOTRACK' }, "NOTRACK")
+						]),
+						
+						E('label', { 'style': 'margin-right: 8px;' }, _('입력인터페이스')),
+						E('select', { 
+							'class': 'narrow-select', 
+							'style': 'margin-right: 20px;', 
+							'data-uci': 'src',
+							'change': function() { 
+								console.log('src changed:', this.value);
+								if (!self.currentRuleSection) {
+									self.currentRuleSection = uci.add('firewall', 'rule');
+									console.log('Created new rule section:', self.currentRuleSection);
+								}
+								self.registerFormChanges(self.formMap);
+							}
+						}, [
+							E('option', { 'value': '' }, _('Loading...'))
+						]),
+						
+						E('label', { 'style': 'margin-right: 8px;' }, _('로그')),
+						E('input', { 'type': 'checkbox', 'style': 'margin-right: 8px;' }),
+						E('span', {}, _('사용'))
+					]),
+
+					// 프로토콜 줄
+					E('div', { 'style': 'margin-bottom: 20px; display: flex; align-items: center;' }, [
+						E('label', { 'style': 'width: 120px; text-align: right; margin-right: 15px; font-weight: bold;' }, _('프로토콜')),
+						E('select', { 
+							'style': 'width: 200px;', 
+							'data-uci': 'proto',
+							'change': function() { 
+								console.log('proto changed:', this.value);
+								if (!self.currentRuleSection) {
+									self.currentRuleSection = uci.add('firewall', 'rule');
+									console.log('Created new rule section:', self.currentRuleSection);
+								}
+								self.registerFormChanges(self.formMap);
+							}
+						}, [
+							E('option', { 'value': 'tcp udp' }, 'TCP+UDP'),
+							E('option', { 'value': 'tcp' }, 'TCP'),
+							E('option', { 'value': 'udp' }, 'UDP'),
+							E('option', { 'value': 'icmp' }, 'ICMP'),
+							E('option', { 'value': 'esp' }, 'ESP'),
+							E('option', { 'value': 'ah' }, 'AH'),
+							E('option', { 'value': 'sctp' }, 'SCTP'),
+							E('option', { 'value': 'all', 'selected': true }, 'Any')
+						])
+					]),
+
+					// 간격 추가
+					E('div', { 'style': 'height: 15px;' }),
+
+					// 출발지
+					E('div', { 'style': 'margin-bottom: 20px; display: flex; align-items: center;' }, [
+						E('label', { 'style': 'width: 120px; text-align: right; margin-right: 15px; font-weight: bold;' }, _('출발지')),
+						E('input', { 'type': 'checkbox', 'style': 'margin-right: 8px;' }),
+						E('span', {}, _('역주소'))
 					]),
 					
-					E('label', { 'style': 'margin-right: 8px; font-weight: bold;' }, _('입력인터페이스')),
-					E('select', { 'style': 'margin-right: 20px;' }, [
-						E('option', { 'value': 'ANY' }, 'ANY')
+					E('div', { 'style': 'margin-bottom: 15px; display: flex; align-items: center;' }, [
+						E('label', { 'style': 'width: 120px; text-align: right; margin-right: 15px;' }, _('IP 타입')),
+						E('select', { 
+							'style': 'width: 200px;', 
+							'id': 'src-ip-type',
+							'data-target': 'src',
+							'change': function() { 
+								ui.changes.setIndicator(true);
+								self.updateIPAddressDropdown(this.value, this.dataset.target);
+							}
+						}, [
+							E('option', { 'value': 'direct' }, _('직접입력(네트워크)'))
+						])
 					]),
 					
-					E('label', { 'style': 'margin-right: 8px; font-weight: bold;' }, _('로그')),
-					E('input', { 'type': 'checkbox', 'style': 'margin-right: 8px;' }),
-					E('span', {}, _('사용'))
-				]),
+					E('div', { 'style': 'margin-bottom: 15px; display: flex; align-items: center;' }, [
+						E('label', { 'style': 'width: 120px; text-align: right; margin-right: 15px;' }, _('IP 주소')),
+						E('select', { 
+							'style': 'width: 300px; display: none;', 
+							'id': 'src-ip-dropdown',
+							'change': function() { 
+								ui.changes.setIndicator(true);
+								self.populateIPFields(this.value, 'src');
+							}
+						}, [
+							E('option', { 'value': '' }, _('-- IP 주소 선택 --'))
+						])
+					]),
+					
+					E('div', { 'style': 'margin-bottom: 15px; display: flex; align-items: center;' }, [
+						E('label', { 'style': 'width: 120px; text-align: right; margin-right: 15px;' }, _('IP 주소')),
+						E('input', { 
+							'type': 'text', 
+							'style': 'width: 60px; margin-right: 5px;', 
+							'data-uci': 'src_ip', 
+							'placeholder': '192',
+							'change': function() { 
+								console.log('src_ip field 1 changed:', this.value);
+								if (!self.currentRuleSection) {
+									self.currentRuleSection = uci.add('firewall', 'rule');
+									console.log('Created new rule section:', self.currentRuleSection);
+								}
+								self.registerFormChanges(self.formMap);
+							}
+						}),
+						E('span', { 'style': 'margin-right: 5px;' }, '.'),
+						E('input', { 
+							'type': 'text', 
+							'style': 'width: 60px; margin-right: 5px;', 
+							'data-uci': 'src_ip', 
+							'placeholder': '168',
+							'change': function() { 
+								console.log('src_ip field 2 changed:', this.value);
+								if (!self.currentRuleSection) {
+									self.currentRuleSection = uci.add('firewall', 'rule');
+									console.log('Created new rule section:', self.currentRuleSection);
+								}
+								self.registerFormChanges(self.formMap);
+							}
+						}),
+						E('span', { 'style': 'margin-right: 5px;' }, '.'),
+						E('input', { 
+							'type': 'text', 
+							'style': 'width: 60px; margin-right: 5px;', 
+							'data-uci': 'src_ip', 
+							'placeholder': '1',
+							'change': function() { 
+								console.log('src_ip field 3 changed:', this.value);
+								if (!self.currentRuleSection) {
+									self.currentRuleSection = uci.add('firewall', 'rule');
+									console.log('Created new rule section:', self.currentRuleSection);
+								}
+								self.registerFormChanges(self.formMap);
+							}
+						}),
+						E('span', { 'style': 'margin-right: 5px;' }, '.'),
+						E('input', { 
+							'type': 'text', 
+							'style': 'width: 60px;', 
+							'data-uci': 'src_ip', 
+							'placeholder': '0',
+							'change': function() { 
+								console.log('src_ip field 4 changed:', this.value);
+								if (!self.currentRuleSection) {
+									self.currentRuleSection = uci.add('firewall', 'rule');
+									console.log('Created new rule section:', self.currentRuleSection);
+								}
+								self.registerFormChanges(self.formMap);
+							}
+						})
+					]),
+					
+					E('div', { 'style': 'margin-bottom: 20px; display: flex; align-items: center;' }, [
+						E('label', { 'style': 'width: 120px; text-align: right; margin-right: 15px;' }, _('넷마스크')),
+						E('input', { 'type': 'text', 'style': 'width: 60px; margin-right: 5px;', 'data-uci': 'src_mask', 'placeholder': '255', 'value': '255', 'change': function() { ui.changes.setIndicator(true); } }),
+						E('span', { 'style': 'margin-right: 5px;' }, '.'),
+						E('input', { 'type': 'text', 'style': 'width: 60px; margin-right: 5px;', 'data-uci': 'src_mask', 'placeholder': '255', 'value': '255', 'change': function() { ui.changes.setIndicator(true); } }),
+						E('span', { 'style': 'margin-right: 5px;' }, '.'),
+						E('input', { 'type': 'text', 'style': 'width: 60px; margin-right: 5px;', 'data-uci': 'src_mask', 'placeholder': '255', 'value': '255', 'change': function() { ui.changes.setIndicator(true); } }),
+						E('span', { 'style': 'margin-right: 5px;' }, '.'),
+						E('input', { 'type': 'text', 'style': 'width: 60px;', 'data-uci': 'src_mask', 'placeholder': '0', 'value': '0', 'change': function() { ui.changes.setIndicator(true); } })
+					]),
 
-				// 프로토콜 줄
-				E('div', { 'style': 'margin-bottom: 20px; display: flex; align-items: center;' }, [
-					E('label', { 'style': 'width: 120px; text-align: right; margin-right: 15px; font-weight: bold;' }, _('프로토콜')),
-					E('select', { 'style': 'width: 200px;' }, [
-						E('option', { 'value': 'ANY' }, 'ANY')
+					// 간격 추가
+					E('div', { 'style': 'height: 15px;' }),
+
+					// 목적지
+					E('div', { 'style': 'margin-bottom: 20px; display: flex; align-items: center;' }, [
+						E('label', { 'style': 'width: 120px; text-align: right; margin-right: 15px; font-weight: bold;' }, _('목적지')),
+						E('input', { 'type': 'checkbox', 'style': 'margin-right: 8px;' }),
+						E('span', {}, _('역주소'))
+					]),
+					
+					E('div', { 'style': 'margin-bottom: 15px; display: flex; align-items: center;' }, [
+						E('label', { 'style': 'width: 120px; text-align: right; margin-right: 15px;' }, _('IP 타입')),
+						E('select', { 
+							'style': 'width: 200px;', 
+							'id': 'dest-ip-type',
+							'data-target': 'dest',
+							'change': function() { 
+								ui.changes.setIndicator(true);
+								self.updateIPAddressDropdown(this.value, this.dataset.target);
+							}
+						}, [
+							E('option', { 'value': 'direct' }, _('직접입력(네트워크)'))
+						])
+					]),
+					
+					E('div', { 'style': 'margin-bottom: 15px; display: flex; align-items: center;' }, [
+						E('label', { 'style': 'width: 120px; text-align: right; margin-right: 15px;' }, _('IP 주소')),
+						E('select', { 
+							'style': 'width: 300px; display: none;', 
+							'id': 'dest-ip-dropdown',
+							'change': function() { 
+								ui.changes.setIndicator(true);
+								self.populateIPFields(this.value, 'dest');
+							}
+						}, [
+							E('option', { 'value': '' }, _('-- IP 주소 선택 --'))
+						])
+					]),
+					
+					E('div', { 'style': 'margin-bottom: 15px; display: flex; align-items: center;' }, [
+						E('label', { 'style': 'width: 120px; text-align: right; margin-right: 15px;' }, _('IP 주소')),
+						E('input', { 'type': 'text', 'style': 'width: 60px; margin-right: 5px;', 'data-uci': 'dest_ip', 'placeholder': '0', 'change': function() { ui.changes.setIndicator(true); } }),
+						E('span', { 'style': 'margin-right: 5px;' }, '.'),
+						E('input', { 'type': 'text', 'style': 'width: 60px; margin-right: 5px;', 'data-uci': 'dest_ip', 'placeholder': '0', 'change': function() { ui.changes.setIndicator(true); } }),
+						E('span', { 'style': 'margin-right: 5px;' }, '.'),
+						E('input', { 'type': 'text', 'style': 'width: 60px; margin-right: 5px;', 'data-uci': 'dest_ip', 'placeholder': '0', 'change': function() { ui.changes.setIndicator(true); } }),
+						E('span', { 'style': 'margin-right: 5px;' }, '.'),
+						E('input', { 'type': 'text', 'style': 'width: 60px;', 'data-uci': 'dest_ip', 'placeholder': '0', 'change': function() { ui.changes.setIndicator(true); } })
+					]),
+					
+					E('div', { 'style': 'margin-bottom: 20px; display: flex; align-items: center;' }, [
+						E('label', { 'style': 'width: 120px; text-align: right; margin-right: 15px;' }, _('넷마스크')),
+						E('input', { 'type': 'text', 'style': 'width: 60px; margin-right: 5px;', 'data-uci': 'dest_mask', 'placeholder': '0', 'value': '0', 'change': function() { ui.changes.setIndicator(true); } }),
+						E('span', { 'style': 'margin-right: 5px;' }, '.'),
+						E('input', { 'type': 'text', 'style': 'width: 60px; margin-right: 5px;', 'data-uci': 'dest_mask', 'placeholder': '0', 'value': '0', 'change': function() { ui.changes.setIndicator(true); } }),
+						E('span', { 'style': 'margin-right: 5px;' }, '.'),
+						E('input', { 'type': 'text', 'style': 'width: 60px; margin-right: 5px;', 'data-uci': 'dest_mask', 'placeholder': '0', 'value': '0', 'change': function() { ui.changes.setIndicator(true); } }),
+						E('span', { 'style': 'margin-right: 5px;' }, '.'),
+						E('input', { 'type': 'text', 'style': 'width: 60px;', 'data-uci': 'dest_mask', 'placeholder': '0', 'value': '0', 'change': function() { ui.changes.setIndicator(true); } })
+					]),
+
+					// 간격 추가
+					E('div', { 'style': 'height: 15px;' }),
+
+					// 타임아웃 (Time Restrictions)
+					E('div', { 'style': 'margin-bottom: 20px; display: flex; align-items: center;' }, [
+						E('label', { 'style': 'width: 120px; text-align: right; margin-right: 15px; font-weight: bold;' }, _('타임아웃')),
+						E('input', { 
+							'type': 'checkbox', 
+							'style': 'margin-right: 8px;',
+							'id': 'time-restrictions-enable',
+							'change': function() { 
+								ui.changes.setIndicator(true);
+								var container = document.getElementById('time-restrictions-settings');
+								if (container) {
+									container.style.display = this.checked ? 'block' : 'none';
+								}
+							}
+						}),
+						E('span', {}, _('사용'))
+					]),
+
+					// Time Restrictions 설정 영역 (기존 timed 탭 필드들 복사)
+					E('div', { 
+						'id': 'time-restrictions-settings',
+						'style': 'display: none; margin-left: 135px; padding: 15px; border: 1px solid #ddd; background: #f9f9f9; border-radius: 5px; margin-bottom: 20px;'
+					}, [
+						E('h4', { 'style': 'margin: 0 0 15px 0; color: #333;' }, _('Time Restrictions')),
+						
+						// Week Days (기존 코드 복사)
+						E('div', { 'style': 'margin-bottom: 15px;' }, [
+							E('label', { 'style': 'font-weight: bold; display: block; margin-bottom: 5px;' }, _('Week Days')),
+							E('div', { 'style': 'display: flex; gap: 15px; flex-wrap: wrap;' }, [
+								E('label', {}, [E('input', { 'type': 'checkbox', 'data-uci': 'weekdays', 'value': 'Sun', 'change': function() { ui.changes.setIndicator(true); } }), ' ', _('Sunday')]),
+								E('label', {}, [E('input', { 'type': 'checkbox', 'data-uci': 'weekdays', 'value': 'Mon', 'change': function() { ui.changes.setIndicator(true); } }), ' ', _('Monday')]),
+								E('label', {}, [E('input', { 'type': 'checkbox', 'data-uci': 'weekdays', 'value': 'Tue', 'change': function() { ui.changes.setIndicator(true); } }), ' ', _('Tuesday')]),
+								E('label', {}, [E('input', { 'type': 'checkbox', 'data-uci': 'weekdays', 'value': 'Wed', 'change': function() { ui.changes.setIndicator(true); } }), ' ', _('Wednesday')]),
+								E('label', {}, [E('input', { 'type': 'checkbox', 'data-uci': 'weekdays', 'value': 'Thu', 'change': function() { ui.changes.setIndicator(true); } }), ' ', _('Thursday')]),
+								E('label', {}, [E('input', { 'type': 'checkbox', 'data-uci': 'weekdays', 'value': 'Fri', 'change': function() { ui.changes.setIndicator(true); } }), ' ', _('Friday')]),
+								E('label', {}, [E('input', { 'type': 'checkbox', 'data-uci': 'weekdays', 'value': 'Sat', 'change': function() { ui.changes.setIndicator(true); } }), ' ', _('Saturday')])
+							])
+						]),
+
+						// Time Range
+						E('div', { 'style': 'margin-bottom: 15px; display: flex; align-items: center; gap: 10px;' }, [
+							E('label', { 'style': 'font-weight: bold; min-width: 100px;' }, _('Start Time (hh:mm:ss)')),
+							E('input', { 
+								'type': 'text', 
+								'placeholder': '00:00:00', 
+								'style': 'width: 100px;', 
+								'data-uci': 'start_time',
+								'change': function() { ui.changes.setIndicator(true); }
+							}),
+							E('label', { 'style': 'font-weight: bold; margin-left: 20px; min-width: 100px;' }, _('Stop Time (hh:mm:ss)')),
+							E('input', { 
+								'type': 'text', 
+								'placeholder': '23:59:59', 
+								'style': 'width: 100px;', 
+								'data-uci': 'stop_time',
+								'change': function() { ui.changes.setIndicator(true); }
+							})
+						]),
+
+						// Date Range
+						E('div', { 'style': 'margin-bottom: 15px; display: flex; align-items: center; gap: 10px;' }, [
+							E('label', { 'style': 'font-weight: bold; min-width: 100px;' }, _('Start Date (yyyy-mm-dd)')),
+							E('input', { 
+								'type': 'date', 
+								'style': 'width: 150px;', 
+								'data-uci': 'start_date',
+								'change': function() { ui.changes.setIndicator(true); }
+							}),
+							E('label', { 'style': 'font-weight: bold; margin-left: 20px; min-width: 100px;' }, _('Stop Date (yyyy-mm-dd)')),
+							E('input', { 
+								'type': 'date', 
+								'style': 'width: 150px;', 
+								'data-uci': 'stop_date',
+								'change': function() { ui.changes.setIndicator(true); }
+							})
+						]),
+
+						// Month Days
+						E('div', { 'style': 'margin-bottom: 10px;' }, [
+							E('label', { 'style': 'font-weight: bold; display: block; margin-bottom: 5px;' }, _('Month Days')),
+							E('div', { 'style': 'display: grid; grid-template-columns: repeat(8, 1fr); gap: 5px; max-width: 400px;' }, 
+								Array.from({length: 31}, (_, i) => i + 1).map(day => 
+									E('label', { 'style': 'text-align: center; font-size: 12px;' }, [
+										E('input', { 
+											'type': 'checkbox', 
+											'data-uci': 'monthdays', 
+											'value': day.toString(),
+											'change': function() { ui.changes.setIndicator(true); }
+										}), 
+										' ', day.toString()
+									])
+								)
+							)
+						])
+					]),
+
+					// Stateful Inspection
+					E('div', { 'style': 'margin-bottom: 15px; display: flex; align-items: center;' }, [
+						E('label', { 'style': 'width: 120px; text-align: right; margin-right: 15px; font-weight: bold;' }, 'Stateful Inspection'),
+						E('input', { 
+							'type': 'checkbox', 
+							'style': 'margin-right: 8px;',
+							'id': 'stateful-main',
+							'data-uci': 'stateful_enabled',
+							'change': function() { 
+								console.log('stateful main changed:', this.checked);
+								self.toggleStatefulOptions();
+								if (!self.currentRuleSection) {
+									self.currentRuleSection = uci.add('firewall', 'rule');
+									console.log('Created new rule section:', self.currentRuleSection);
+								}
+								self.registerFormChanges(self.formMap);
+							}
+						}),
+						E('span', {}, _('사용'))
+					]),
+					
+					// Stateful Inspection 세부 옵션 (처음에는 숨김)
+					E('div', { 
+						'id': 'stateful-options',
+						'style': 'margin-bottom: 15px; display: none; align-items: center; margin-left: 135px;' 
+					}, [
+						E('input', { 
+							'type': 'checkbox', 
+							'style': 'margin-right: 5px;',
+							'data-uci': 'stateful_new',
+							'change': function() { 
+								console.log('stateful new changed:', this.checked);
+								if (!self.currentRuleSection) {
+									self.currentRuleSection = uci.add('firewall', 'rule');
+									console.log('Created new rule section:', self.currentRuleSection);
+								}
+								self.registerFormChanges(self.formMap);
+							}
+						}),
+						E('span', { 'style': 'margin-right: 15px;' }, 'New'),
+						
+						E('input', { 
+							'type': 'checkbox', 
+							'style': 'margin-right: 5px;',
+							'data-uci': 'stateful_established',
+							'change': function() { 
+								console.log('stateful established changed:', this.checked);
+								if (!self.currentRuleSection) {
+									self.currentRuleSection = uci.add('firewall', 'rule');
+									console.log('Created new rule section:', self.currentRuleSection);
+								}
+								self.registerFormChanges(self.formMap);
+							}
+						}),
+						E('span', { 'style': 'margin-right: 15px;' }, 'Established'),
+						
+						E('input', { 
+							'type': 'checkbox', 
+							'style': 'margin-right: 5px;',
+							'data-uci': 'stateful_related',
+							'change': function() { 
+								console.log('stateful related changed:', this.checked);
+								if (!self.currentRuleSection) {
+									self.currentRuleSection = uci.add('firewall', 'rule');
+									console.log('Created new rule section:', self.currentRuleSection);
+								}
+								self.registerFormChanges(self.formMap);
+							}
+						}),
+						E('span', { 'style': 'margin-right: 15px;' }, 'Related'),
+						
+						E('input', { 
+							'type': 'checkbox', 
+							'style': 'margin-right: 5px;',
+							'data-uci': 'stateful_invalid',
+							'change': function() { 
+								console.log('stateful invalid changed:', this.checked);
+								if (!self.currentRuleSection) {
+									self.currentRuleSection = uci.add('firewall', 'rule');
+									console.log('Created new rule section:', self.currentRuleSection);
+								}
+								self.registerFormChanges(self.formMap);
+							}
+						}),
+						E('span', { 'style': 'margin-right: 15px;' }, 'Invalid')
+					]),
+					
+					E('div', { 'style': 'margin-bottom: 20px; display: flex; align-items: center;' }, [
+						E('label', { 'style': 'width: 120px; text-align: right; margin-right: 15px; font-weight: bold;' }, _('정책 사용자')),
+						E('input', { 'type': 'checkbox', 'style': 'margin-right: 8px;' }),
+						E('span', {}, _('사용'))
+					]),
+
+					// 간격 추가
+					E('div', { 'style': 'height: 15px;' }),
+
+					// 제한 옵션
+					E('div', { 'style': 'margin-bottom: 15px; display: flex; align-items: center;' }, [
+						E('label', { 'style': 'width: 120px; text-align: right; margin-right: 15px; font-weight: bold;' }, _('제한 옵션'))
+					]),
+					
+					E('div', { 'style': 'margin-bottom: 15px; display: flex; align-items: center;' }, [
+						E('label', { 'style': 'width: 120px; text-align: right; margin-right: 15px;' }, _('빈도 제한')),
+						E('input', { 'type': 'checkbox', 'style': 'margin-right: 8px;' }),
+						E('span', {}, _('사용'))
+					]),
+					
+					E('div', { 'style': 'margin-bottom: 15px; display: flex; align-items: center;' }, [
+						E('label', { 'style': 'width: 120px; text-align: right; margin-right: 15px;' }, _('세션제한')),
+						E('input', { 'type': 'checkbox', 'style': 'margin-right: 8px;' }),
+						E('span', {}, _('사용'))
+					]),
+					
+					E('div', { 'style': 'margin-bottom: 20px; display: flex; align-items: center;' }, [
+						E('label', { 'style': 'width: 120px; text-align: right; margin-right: 15px; font-weight: bold;' }, _('주석')),
+						E('input', { 
+							'type': 'text', 
+							'placeholder': _('주석을 입력하세요'), 
+							'style': 'width: 300px;',
+							'data-uci': 'comment',
+							'change': function() { 
+								console.log('comment changed:', this.value);
+								if (!self.currentRuleSection) {
+									self.currentRuleSection = uci.add('firewall', 'rule');
+									console.log('Created new rule section:', self.currentRuleSection);
+								}
+								self.registerFormChanges(self.formMap);
+							}
+						})
 					])
-				]),
-
-				// 출발지
-				E('div', { 'style': 'margin-bottom: 20px; display: flex; align-items: center;' }, [
-					E('label', { 'style': 'width: 120px; text-align: right; margin-right: 15px; font-weight: bold;' }, _('출발지')),
-					E('input', { 'type': 'checkbox', 'style': 'margin-right: 8px;' }),
-					E('span', {}, _('역순소'))
-				]),
-				
-				E('div', { 'style': 'margin-bottom: 15px; display: flex; align-items: center;' }, [
-					E('label', { 'style': 'width: 120px; text-align: right; margin-right: 15px; font-weight: bold;' }, _('IP 타입')),
-					E('select', { 'style': 'width: 200px;' }, [
-						E('option', { 'value': 'direct' }, _('직접입력(네트워크)'))
-					])
-				]),
-				
-				E('div', { 'style': 'margin-bottom: 15px; display: flex; align-items: center;' }, [
-					E('label', { 'style': 'width: 120px; text-align: right; margin-right: 15px; font-weight: bold;' }, _('IP 주소')),
-					E('input', { 'type': 'text', 'style': 'width: 60px; margin-right: 5px;' }),
-					E('span', { 'style': 'margin-right: 5px;' }, '.'),
-					E('input', { 'type': 'text', 'style': 'width: 60px; margin-right: 5px;' }),
-					E('span', { 'style': 'margin-right: 5px;' }, '.'),
-					E('input', { 'type': 'text', 'style': 'width: 60px; margin-right: 5px;' }),
-					E('span', { 'style': 'margin-right: 5px;' }, '.'),
-					E('input', { 'type': 'text', 'style': 'width: 60px;' })
-				]),
-				
-				E('div', { 'style': 'margin-bottom: 20px; display: flex; align-items: center;' }, [
-					E('label', { 'style': 'width: 120px; text-align: right; margin-right: 15px; font-weight: bold;' }, _('넷마스크')),
-					E('input', { 'type': 'text', 'style': 'width: 60px; margin-right: 5px;' }),
-					E('span', { 'style': 'margin-right: 5px;' }, '.'),
-					E('input', { 'type': 'text', 'style': 'width: 60px; margin-right: 5px;' }),
-					E('span', { 'style': 'margin-right: 5px;' }, '.'),
-					E('input', { 'type': 'text', 'style': 'width: 60px; margin-right: 5px;' }),
-					E('span', { 'style': 'margin-right: 5px;' }, '.'),
-					E('input', { 'type': 'text', 'style': 'width: 60px;' })
-				]),
-
-				// 목적지
-				E('div', { 'style': 'margin-bottom: 20px; display: flex; align-items: center;' }, [
-					E('label', { 'style': 'width: 120px; text-align: right; margin-right: 15px; font-weight: bold;' }, _('목적지')),
-					E('input', { 'type': 'checkbox', 'style': 'margin-right: 8px;' }),
-					E('span', {}, _('역순소'))
-				]),
-				
-				E('div', { 'style': 'margin-bottom: 15px; display: flex; align-items: center;' }, [
-					E('label', { 'style': 'width: 120px; text-align: right; margin-right: 15px; font-weight: bold;' }, _('IP 타입')),
-					E('select', { 'style': 'width: 200px;' }, [
-						E('option', { 'value': 'direct' }, _('직접입력(네트워크)'))
-					])
-				]),
-				
-				E('div', { 'style': 'margin-bottom: 15px; display: flex; align-items: center;' }, [
-					E('label', { 'style': 'width: 120px; text-align: right; margin-right: 15px; font-weight: bold;' }, _('IP 주소')),
-					E('input', { 'type': 'text', 'style': 'width: 60px; margin-right: 5px;' }),
-					E('span', { 'style': 'margin-right: 5px;' }, '.'),
-					E('input', { 'type': 'text', 'style': 'width: 60px; margin-right: 5px;' }),
-					E('span', { 'style': 'margin-right: 5px;' }, '.'),
-					E('input', { 'type': 'text', 'style': 'width: 60px; margin-right: 5px;' }),
-					E('span', { 'style': 'margin-right: 5px;' }, '.'),
-					E('input', { 'type': 'text', 'style': 'width: 60px;' })
-				]),
-				
-				E('div', { 'style': 'margin-bottom: 20px; display: flex; align-items: center;' }, [
-					E('label', { 'style': 'width: 120px; text-align: right; margin-right: 15px; font-weight: bold;' }, _('넷마스크')),
-					E('input', { 'type': 'text', 'style': 'width: 60px; margin-right: 5px;' }),
-					E('span', { 'style': 'margin-right: 5px;' }, '.'),
-					E('input', { 'type': 'text', 'style': 'width: 60px; margin-right: 5px;' }),
-					E('span', { 'style': 'margin-right: 5px;' }, '.'),
-					E('input', { 'type': 'text', 'style': 'width: 60px; margin-right: 5px;' }),
-					E('span', { 'style': 'margin-right: 5px;' }, '.'),
-					E('input', { 'type': 'text', 'style': 'width: 60px;' })
-				]),
-
-				// 타임아웃
-				E('div', { 'style': 'margin-bottom: 20px; display: flex; align-items: center;' }, [
-					E('label', { 'style': 'width: 120px; text-align: right; margin-right: 15px; font-weight: bold;' }, _('타임아웃')),
-					E('input', { 'type': 'checkbox', 'style': 'margin-right: 8px;' }),
-					E('span', {}, _('사용'))
-				]),
-
-				// 사용시간설정
-				E('div', { 'style': 'margin-bottom: 20px; display: flex; align-items: center;' }, [
-					E('label', { 'style': 'width: 120px; text-align: right; margin-right: 15px; font-weight: bold;' }, _('사용시간설정')),
-					E('select', { 'style': 'width: 200px;' }, [
-						E('option', { 'value': 'ANY' }, 'ANY')
-					])
-				]),
-
-				// Stateful Inspection
-				E('div', { 'style': 'margin-bottom: 15px; display: flex; align-items: center;' }, [
-					E('label', { 'style': 'width: 120px; text-align: right; margin-right: 15px; font-weight: bold;' }, 'Stateful Inspection'),
-					E('input', { 'type': 'checkbox', 'style': 'margin-right: 8px;' }),
-					E('span', {}, _('사용'))
-				]),
-				
-				E('div', { 'style': 'margin-bottom: 20px; display: flex; align-items: center;' }, [
-					E('label', { 'style': 'width: 120px; text-align: right; margin-right: 15px; font-weight: bold;' }, _('정책 사용자')),
-					E('input', { 'type': 'checkbox', 'style': 'margin-right: 8px;' }),
-					E('span', {}, _('사용'))
-				]),
-
-				// 제한 옵션
-				E('div', { 'style': 'margin-bottom: 15px; display: flex; align-items: center;' }, [
-					E('label', { 'style': 'width: 120px; text-align: right; margin-right: 15px; font-weight: bold;' }, _('제한 옵션'))
-				]),
-				
-				E('div', { 'style': 'margin-bottom: 15px; display: flex; align-items: center;' }, [
-					E('label', { 'style': 'width: 120px; text-align: right; margin-right: 15px; font-weight: bold;' }, _('밴드 제한')),
-					E('input', { 'type': 'checkbox', 'style': 'margin-right: 8px;' }),
-					E('span', {}, _('사용'))
-				]),
-				
-				E('div', { 'style': 'margin-bottom: 15px; display: flex; align-items: center;' }, [
-					E('label', { 'style': 'width: 120px; text-align: right; margin-right: 15px; font-weight: bold;' }, _('세션제한')),
-					E('input', { 'type': 'checkbox', 'style': 'margin-right: 8px;' }),
-					E('span', {}, _('사용'))
-				]),
-				
-				E('div', { 'style': 'margin-bottom: 20px; display: flex; align-items: center;' }, [
-					E('label', { 'style': 'width: 120px; text-align: right; margin-right: 15px; font-weight: bold;' }, _('추석')),
-					E('input', { 'type': 'text', 'placeholder': _('추석을 입력하세요'), 'style': 'width: 300px;' })
 				])
 			])
 		]);
@@ -798,6 +2543,177 @@ return view.extend({
 			if (selectedContent) selectedContent.classList.add('active');
 		};
 
+		// Form Map 참조 저장
+		this.formMap = m;
+		
+		// UCI 연결 기능 초기화
+		this.initRuleConfigBindings();
+		
+		// Form Map의 변경 감지 시스템과 통합
+		var self = this;
+		
+		// Form의 checkChanges 함수를 오버라이드하여 Rule Config 변경사항도 체크
+		var originalCheckChanges = m.checkChanges;
+		m.checkChanges = function() {
+			console.log('checkChanges called');
+			
+			// 원본 변경사항 체크
+			var hasOriginalChanges = originalCheckChanges ? originalCheckChanges.call(this) : false;
+			
+			// Rule Config 변경사항 체크
+			var hasRuleConfigChanges = false;
+			if (self.currentRuleSection) {
+				var container = document.getElementById('rule-config');
+				if (container) {
+					// 간단한 변경사항 체크 (체크박스, 선택값 등)
+					hasRuleConfigChanges = container.querySelector('input:checked') || 
+						container.querySelector('select option:selected:not([value=""])');
+				}
+			}
+			
+			console.log('Original changes:', hasOriginalChanges, 'Rule Config changes:', hasRuleConfigChanges);
+			return hasOriginalChanges || hasRuleConfigChanges;
+		};
+		
+		// handleSave를 오버라이드하여 Rule Config 저장 포함
+		var originalHandleSave = m.handleSave;
+		m.handleSave = function() {
+			console.log('🚀🚀🚀 [FIREWALL-DEBUG] ===============================');
+			console.log('🚀🚀🚀 [FIREWALL-DEBUG] HANDLESAVE CALLED!');
+			console.log('🚀🚀🚀 [FIREWALL-DEBUG] ===============================');
+			console.log('handleSave called');
+			
+			// Rule Config 변경사항이 있으면 먼저 저장
+			if (self.currentRuleSection) {
+				console.log('🚀 [FIREWALL-DEBUG] Has currentRuleSection:', self.currentRuleSection);
+				console.log('🚀 [FIREWALL-DEBUG] Saving Rule Config changes first');
+				return self.saveRuleConfig().then(function() {
+					console.log('🚀 [FIREWALL-DEBUG] Rule Config saved, calling original handleSave');
+					return originalHandleSave.call(this);
+				}.bind(this));
+			}
+			
+			console.log('🚀 [FIREWALL-DEBUG] No Rule Config changes, calling original handleSave');
+			return originalHandleSave.call(this);
+		};
+		
+		// handleSaveApply도 오버라이드 (저장&적용 버튼용)
+		var originalHandleSaveApply = m.handleSaveApply;
+		if (originalHandleSaveApply) {
+			m.handleSaveApply = function() {
+				console.log('💾💾💾 [FIREWALL-DEBUG] ===============================');
+				console.log('💾💾💾 [FIREWALL-DEBUG] HANDLESAVEAPPLY CALLED!');
+				console.log('💾💾💾 [FIREWALL-DEBUG] ===============================');
+				console.log('handleSaveApply called');
+				
+				// Rule Config 변경사항이 있으면 먼저 저장
+				if (self.currentRuleSection) {
+					console.log('💾 [FIREWALL-DEBUG] Has currentRuleSection:', self.currentRuleSection);
+					console.log('💾 [FIREWALL-DEBUG] Saving Rule Config changes first');
+					return self.saveRuleConfig().then(function() {
+						console.log('💾 [FIREWALL-DEBUG] Rule Config saved, calling original handleSaveApply');
+						return originalHandleSaveApply.call(this);
+					}.bind(this));
+				}
+				
+				console.log('💾 [FIREWALL-DEBUG] No Rule Config changes, calling original handleSaveApply');
+				return originalHandleSaveApply.call(this);
+			};
+		}
+		
+		// 추가로 폼의 save와 apply 메소드도 직접 훅
+		if (m && typeof m.save === 'function' && !m._originalSave) {
+			console.log('🎣 [FIREWALL-DEBUG] Hooking form.save method');
+			m._originalSave = m.save.bind(m);
+			m.save = function() {
+				console.log('📝📝📝 [FIREWALL-DEBUG] ===============================');
+				console.log('📝📝📝 [FIREWALL-DEBUG] FORM.SAVE CALLED!');
+				console.log('📝📝📝 [FIREWALL-DEBUG] ===============================');
+				
+				// 원본 save 실행
+				var result = m._originalSave();
+				
+				// Promise 형태인지 확인
+				if (result && typeof result.then === 'function') {
+					return result.then(function(saveResult) {
+						console.log('📝 [FIREWALL-DEBUG] Form save completed, performing sorting...');
+						return self.performFirewallSorting().then(function() {
+							console.log('📝 [FIREWALL-DEBUG] Sorting after form save completed');
+							return saveResult;
+						});
+					});
+				} else {
+					// 동기 결과인 경우
+					console.log('📝 [FIREWALL-DEBUG] Synchronous form save, performing sorting...');
+					self.performFirewallSorting();
+					return result;
+				}
+			};
+		}
+		
+		if (m && typeof m.apply === 'function' && !m._originalApply) {
+			console.log('🎣 [FIREWALL-DEBUG] Hooking form.apply method');
+			m._originalApply = m.apply.bind(m);
+			m.apply = function() {
+				console.log('⚡⚡⚡ [FIREWALL-DEBUG] ===============================');
+				console.log('⚡⚡⚡ [FIREWALL-DEBUG] FORM.APPLY CALLED!');
+				console.log('⚡⚡⚡ [FIREWALL-DEBUG] ===============================');
+				
+				// 먼저 정렬 수행 후 apply
+				return self.performFirewallSorting().then(function() {
+					console.log('⚡ [FIREWALL-DEBUG] Sorting completed, calling original apply');
+					return m._originalApply();
+				}).catch(function(err) {
+					console.error('⚡ [FIREWALL-DEBUG] Sorting failed, still calling apply:', err);
+					return m._originalApply();
+				});
+			};
+		}
+		
+		// 전역 버튼 클릭 이벤트 리스너 추가 (모든 가능성 커버)
+		setTimeout(function() {
+			console.log('🎣 [FIREWALL-DEBUG] Setting up global button click listeners');
+			
+			// 저장&적용 버튼 감지
+			var saveApplyButtons = document.querySelectorAll('button, input[type="button"], input[type="submit"]');
+			saveApplyButtons.forEach(function(button) {
+				if (button.textContent && 
+				    (button.textContent.includes('저장') || 
+				     button.textContent.includes('Save') || 
+				     button.textContent.includes('Apply') ||
+				     button.textContent.includes('적용'))) {
+					
+					console.log('🎣 [FIREWALL-DEBUG] Found save/apply button:', button.textContent);
+					
+					// 기존 이벤트가 있다면 백업
+					if (!button._originalOnClick) {
+						button._originalOnClick = button.onclick;
+						
+						button.onclick = function(event) {
+							console.log('🔘🔘🔘 [FIREWALL-DEBUG] ===============================');
+							console.log('🔘🔘🔘 [FIREWALL-DEBUG] BUTTON CLICKED:', button.textContent);
+							console.log('🔘🔘🔘 [FIREWALL-DEBUG] ===============================');
+							
+							// 정렬 수행
+							self.performFirewallSorting().then(function() {
+								console.log('🔘 [FIREWALL-DEBUG] Button click sorting completed');
+								// 원본 클릭 이벤트 실행
+								if (button._originalOnClick) {
+									return button._originalOnClick.call(this, event);
+								}
+							}).catch(function(err) {
+								console.error('🔘 [FIREWALL-DEBUG] Button click sorting failed:', err);
+								// 실패해도 원본 이벤트 실행
+								if (button._originalOnClick) {
+									return button._originalOnClick.call(this, event);
+								}
+							});
+						};
+					}
+				}
+			});
+		}, 1000);
+		
 		// Traffic rules 비동기 렌더링
 		m.render().then(function(rulesHTML) {
 			console.log('Traffic rules rendered, updating container');
@@ -807,6 +2723,35 @@ return view.extend({
 			console.error('Error rendering traffic rules:', err);
 			trafficRuleContainer.innerHTML = '<p style="color: red;">Error loading traffic rules</p>';
 		});
+		
+		// 호스트 정보 로드 후 IP 카테고리 및 인터페이스 정보 적용
+		setTimeout(function() {
+			if (hosts) {
+				var ipCategories = self.categorizeIPAddresses(hosts);
+				self.applyIPCategoriesToUI(ipCategories);
+				console.log('IP categories applied:', ipCategories);
+				
+				// 네트워크 인터페이스 정보 수집 및 적용
+				self.currentNetworkInterfaces = self.collectNetworkInterfaces(hosts);
+				self.updateInterfaceDropdown();
+				console.log('Network interfaces applied:', self.currentNetworkInterfaces);
+			}
+			
+			// 자동 정렬 설정 불러와서 UI 업데이트
+			var autoSortEnabled = self.getAutoSortSetting();
+			var checkbox = document.getElementById('auto-sort-checkbox');
+			var statusText = document.getElementById('auto-sort-status');
+			
+			if (checkbox) {
+				checkbox.checked = autoSortEnabled;
+			}
+			if (statusText) {
+				statusText.textContent = autoSortEnabled ? _('활성화') : _('비활성화');
+				statusText.style.color = autoSortEnabled ? '#28a745' : '#dc3545';
+			}
+			
+			console.log('🎛️ [FIREWALL-DEBUG] Auto-sort setting loaded:', autoSortEnabled);
+		}, 100);
 		
 		return container;
 	}
