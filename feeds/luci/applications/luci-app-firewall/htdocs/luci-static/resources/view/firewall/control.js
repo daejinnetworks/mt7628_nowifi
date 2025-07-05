@@ -586,6 +586,9 @@ return view.extend({
 		
 		// Rule Config 폼 데이터를 UCI에 저장
 		this.saveRuleConfig = function() {
+			console.log('🔥🔥🔥 [FIREWALL-DEBUG] ===============================');
+			console.log('🔥🔥🔥 [FIREWALL-DEBUG] SAVE RULE CONFIG FUNCTION CALLED!');
+			console.log('🔥🔥🔥 [FIREWALL-DEBUG] ===============================');
 			console.log('saveRuleConfig called');
 			
 			if (!self.currentRuleSection) {
@@ -745,16 +748,29 @@ return view.extend({
 				console.log('Set default name for rule');
 			}
 			
-			console.log('Saving UCI changes...');
+			console.log('🔥 [FIREWALL-DEBUG] Preparing to save UCI changes...');
+			console.log('🔥 [FIREWALL-DEBUG] Current rule section:', self.currentRuleSection);
+			console.log('🔥 [FIREWALL-DEBUG] Timestamp:', new Date().toISOString());
+			
+			// 저장 후 정렬 작업 수행
 			return uci.save().then(function() {
-				console.log('UCI save completed');
-				// 옵션 순서 조정 (name을 맨 앞에)
-				return self.reorderRuleOptions();
+				console.log('🔥 [FIREWALL-DEBUG] UCI save completed, now performing sorting...');
+				// 저장 후에 정렬 실행
+				return self.performFirewallSorting();
 			}).then(function() {
-				// PBR include를 파일 맨 아래로 이동
-				return self.movePBRIncludeToBottom();
+				console.log('🔥 [FIREWALL-DEBUG] All operations completed successfully');
+				console.log('🔥 [FIREWALL-DEBUG] Final firewall sections:');
+				var finalSections = uci.sections('firewall');
+				finalSections.forEach(function(section, index) {
+					console.log('🔥 [FIREWALL-DEBUG] Section', index + ':', section['.type'], 
+						section['.name'] || 'unnamed', 
+						section.name || '', 
+						'index:', section['.index']);
+				});
+				return Promise.resolve();
 			}).catch(function(err) {
-				console.error('UCI save failed:', err);
+				console.error('🔥 [FIREWALL-DEBUG] ❌ Operation failed:', err);
+				console.error('🔥 [FIREWALL-DEBUG] Error stack:', err.stack);
 				return Promise.reject(err);
 			});
 		};
@@ -993,23 +1009,30 @@ return view.extend({
 		
 		// Rule 옵션 순서를 재조정하는 함수 (name을 맨 앞에)
 		this.reorderRuleOptions = function() {
-			console.log('Reordering rule options to put name first');
+			console.log('🔧 [FIREWALL-DEBUG] Starting reorderRuleOptions');
+			console.log('🔧 [FIREWALL-DEBUG] Current rule section:', self.currentRuleSection);
 			
 			if (!self.currentRuleSection) {
-				console.log('No current rule section to reorder');
+				console.log('🔧 [FIREWALL-DEBUG] ⚠️ No current rule section to reorder');
 				return Promise.resolve();
 			}
 			
 			// 현재 rule의 모든 옵션 값 백업
 			var section = uci.get('firewall', self.currentRuleSection);
+			console.log('🔧 [FIREWALL-DEBUG] Retrieved section data:', section);
+			
 			if (!section) {
-				console.log('Rule section not found:', self.currentRuleSection);
+				console.log('🔧 [FIREWALL-DEBUG] ❌ Rule section not found:', self.currentRuleSection);
 				return Promise.resolve();
 			}
 			
 			// rule section을 제거하고 다시 생성
+			console.log('🔧 [FIREWALL-DEBUG] Removing old section:', self.currentRuleSection);
 			uci.remove('firewall', self.currentRuleSection);
+			
+			console.log('🔧 [FIREWALL-DEBUG] Adding new rule section...');
 			var newSid = uci.add('firewall', 'rule');
+			console.log('🔧 [FIREWALL-DEBUG] New section ID:', newSid);
 			
 			// 원하는 순서로 옵션 설정
 			var orderedOptions = [
@@ -1029,34 +1052,31 @@ return view.extend({
 				'comment'    // 주석 (맨 마지막)
 			];
 			
+			console.log('🔧 [FIREWALL-DEBUG] Setting ordered options...');
 			// 순서대로 옵션 설정
 			orderedOptions.forEach(function(optionName) {
 				if (section[optionName] !== undefined) {
 					uci.set('firewall', newSid, optionName, section[optionName]);
-					console.log('Set ordered option:', optionName, '=', section[optionName]);
+					console.log('🔧 [FIREWALL-DEBUG] Set ordered option:', optionName, '=', section[optionName]);
 				}
 			});
 			
+			console.log('🔧 [FIREWALL-DEBUG] Setting additional options...');
 			// 순서에 없는 다른 옵션들도 추가
 			Object.keys(section).forEach(function(key) {
 				if (key.indexOf('.') !== 0 && orderedOptions.indexOf(key) === -1) {
 					uci.set('firewall', newSid, key, section[key]);
-					console.log('Set additional option:', key, '=', section[key]);
+					console.log('🔧 [FIREWALL-DEBUG] Set additional option:', key, '=', section[key]);
 				}
 			});
 			
 			// 새로운 section ID 업데이트
 			self.currentRuleSection = newSid;
-			console.log('Rule options reordered, new section ID:', newSid);
+			console.log('🔧 [FIREWALL-DEBUG] ✅ Rule options reordered, new section ID:', newSid);
 			
-			// 변경사항 저장
-			return uci.save().then(function() {
-				console.log('Rule reordering completed');
-				return Promise.resolve();
-			}).catch(function(err) {
-				console.error('Failed to save rule reordering:', err);
-				return Promise.resolve(); // 실패해도 계속 진행
-			});
+			// 저장은 메인 함수에서 처리하므로 여기서는 하지 않음
+			console.log('🔧 [FIREWALL-DEBUG] Rule reordering completed (save will be done later)');
+			return Promise.resolve();
 		};
 		
 		// PBR include를 파일 맨 아래로 이동시키는 함수
@@ -1125,6 +1145,342 @@ return view.extend({
 				console.log('No PBR include sections found');
 				return Promise.resolve();
 			}
+		};
+		
+		// rule 섹션들을 name에 따라 정렬하는 함수 (규칙 정렬에만 집중) - 사용하지 않음
+		/*this.sortRulesByName = function() {
+			console.log('📋 [FIREWALL-DEBUG] Starting sortRulesByName - Rules only');
+			
+			// firewall 설정의 모든 섹션 가져오기
+			var allSections = uci.sections('firewall');
+			console.log('📋 [FIREWALL-DEBUG] Total sections found:', allSections.length);
+			
+			var ruleSections = [];
+			var nonRuleSections = [];
+			
+			// 섹션들을 타입별로 분리 (PBR 제외)
+			allSections.forEach(function(section) {
+				console.log('📋 [FIREWALL-DEBUG] Processing section:', section['.type'], section['.name'] || 'unnamed', 'name:', section.name || 'none');
+				
+				if (section['.type'] === 'rule') {
+					ruleSections.push(section);
+				} else {
+					nonRuleSections.push(section);
+				}
+			});
+			
+			console.log('📋 [FIREWALL-DEBUG] Section breakdown - Rules:', ruleSections.length, 'Non-rules:', nonRuleSections.length);
+			console.log('📋 [FIREWALL-DEBUG] Rule sections details:');
+			ruleSections.forEach(function(rule, index) {
+				console.log('📋 [FIREWALL-DEBUG]   Rule', index + ':', rule.name || 'unnamed', '(', rule['.name'], ')');
+			});
+			
+			// rule이 2개 이상 있을 때만 정렬
+			if (ruleSections.length > 1) {
+				// rule 섹션들을 name에 따라 정렬 (알파벳/숫자 순)
+				var sortedRules = ruleSections.slice().sort(function(a, b) {
+					var nameA = (a.name || '').toString().toLowerCase();
+					var nameB = (b.name || '').toString().toLowerCase();
+					
+					// 숫자인지 확인
+					var isNumA = !isNaN(nameA) && !isNaN(parseFloat(nameA));
+					var isNumB = !isNaN(nameB) && !isNaN(parseFloat(nameB));
+					
+					// 둘 다 숫자면 숫자로 비교
+					if (isNumA && isNumB) {
+						return parseFloat(nameA) - parseFloat(nameB);
+					}
+					
+					// 하나만 숫자면 숫자를 먼저 
+					if (isNumA && !isNumB) return -1;
+					if (!isNumA && isNumB) return 1;
+					
+					// 둘 다 문자면 알파벳 순
+					return nameA.localeCompare(nameB);
+				});
+				
+				console.log('Current rule order:', ruleSections.map(function(r) { return r.name || 'unnamed'; }));
+				console.log('Target rule order:', sortedRules.map(function(r) { return r.name || 'unnamed'; }));
+				
+				// 순서가 바뀌었는지 확인
+				var needsReordering = false;
+				for (var i = 0; i < ruleSections.length; i++) {
+					if (ruleSections[i]['.name'] !== sortedRules[i]['.name']) {
+						needsReordering = true;
+						break;
+					}
+				}
+				
+				if (needsReordering) {
+					console.log('📋 [FIREWALL-DEBUG] 🔄 Rules need reordering, using index-based reordering...');
+					
+					// 인덱스 기반 재정렬 사용
+					var currentIndex = 0;
+					
+					// 1. Non-rule 섹션들 먼저
+					nonRuleSections.forEach(function(section) {
+						section['.index'] = currentIndex++;
+						console.log('📋 [FIREWALL-DEBUG] Set index', section['.index'], 'for', section['.type'], 
+							(section.name || section['.name']));
+					});
+					
+					// 2. 정렬된 rule 섹션들
+					sortedRules.forEach(function(section) {
+						section['.index'] = currentIndex++;
+						console.log('📋 [FIREWALL-DEBUG] Set index', section['.index'], 'for rule', section.name);
+					});
+					
+					// 재정렬 플래그 설정
+					uci.state.reorder['firewall'] = true;
+					console.log('📋 [FIREWALL-DEBUG] ✅ Rule reordering completed');
+					return Promise.resolve();
+				} else {
+					console.log('Rules are already in correct order');
+					return Promise.resolve();
+				}
+			} else {
+				console.log('Less than 2 rule sections found, no rule sorting needed');
+				return Promise.resolve();
+			}
+		};*/
+		
+		// 자동 정렬 + PBR 마지막 배치 기능 (설정 가능)
+		this.performFirewallSorting = function() {
+			console.log('🎯 [FIREWALL-DEBUG] ===============================');
+			console.log('🎯 [FIREWALL-DEBUG] PERFORMING FIREWALL SORTING!');
+			console.log('🎯 [FIREWALL-DEBUG] ===============================');
+			
+			// 자동 정렬 활성화/비활성화 설정 (웹 인터페이스에서 가져오기)
+			var enableAutoSort = self.getAutoSortSetting();
+			
+			return Promise.resolve().then(function() {
+				console.log('🎯 [FIREWALL-DEBUG] Step 1: Starting reorderRuleOptions...');
+				return self.reorderRuleOptions();
+			}).then(function() {
+				if (enableAutoSort) {
+					console.log('🎯 [FIREWALL-DEBUG] Step 2: Sorting rules by name and moving PBR to bottom...');
+					return self.sortRulesAndMovePBRToBottom();
+				} else {
+					console.log('🎯 [FIREWALL-DEBUG] Step 2: Skipping rule sorting, only moving PBR to bottom...');
+					return self.movePBRToBottomOnly();
+				}
+			}).then(function() {
+				console.log('🎯 [FIREWALL-DEBUG] Step 3: Saving sorted configuration...');
+				return uci.save();
+			}).then(function() {
+				console.log('🎯 [FIREWALL-DEBUG] ✅ Firewall sorting and save completed!');
+				return Promise.resolve();
+			}).catch(function(err) {
+				console.error('🎯 [FIREWALL-DEBUG] ❌ Firewall sorting failed:', err);
+				return Promise.resolve(); // 실패해도 계속 진행
+			});
+		};
+		
+		// 규칙 정렬 + PBR 마지막 배치 통합 함수 (uci.move() 사용)
+		this.sortRulesAndMovePBRToBottom = function() {
+			console.log('🎯 [FIREWALL-DEBUG] Sorting rules by name and moving PBR to bottom using uci.move()...');
+			
+			// 현재 섹션들 가져오기
+			var allSections = uci.sections('firewall');
+			var pbrSections = [];
+			var ruleSections = [];
+			var otherSections = [];
+			
+			// 섹션들을 타입별로 분리
+			allSections.forEach(function(section) {
+				if (section['.type'] === 'include' && 
+					(section['.name'] === 'pbr' || 
+					 section.path === '/usr/share/pbr/firewall.include' ||
+					 section['.name'].indexOf('pbr') !== -1)) {
+					pbrSections.push(section);
+					console.log('🎯 [FIREWALL-DEBUG] Found PBR section:', section['.name'], section.path);
+				} else if (section['.type'] === 'rule') {
+					ruleSections.push(section);
+				} else {
+					otherSections.push(section);
+				}
+			});
+			
+			console.log('🎯 [FIREWALL-DEBUG] Section counts - Rules:', ruleSections.length, 'PBR:', pbrSections.length, 'Others:', otherSections.length);
+			
+			if (ruleSections.length > 1) {
+				// 규칙들을 이름 순으로 정렬 (커스텀 순서 지원)
+				var sortedRules = ruleSections.slice().sort(function(a, b) {
+					var nameA = (a.name || '').toString().toLowerCase();
+					var nameB = (b.name || '').toString().toLowerCase();
+					
+					// 커스텀 정렬 순서 정의 (원하는 순서대로 배치)
+					var customOrder = [
+						// 숫자 이름들은 숫자 순으로 자동 정렬
+						// 텍스트 이름들의 커스텀 순서를 여기에 정의
+						'my ip',           // 첫 번째로 배치하고 싶은 규칙
+						'vpn access',      // 두 번째로 배치하고 싶은 규칙
+						'lan access',      // 세 번째로 배치하고 싶은 규칙
+						'guest network',   // 네 번째로 배치하고 싶은 규칙
+						// 여기에 더 추가 가능...
+					];
+					
+					// 숫자인지 확인
+					var isNumA = !isNaN(nameA) && !isNaN(parseFloat(nameA));
+					var isNumB = !isNaN(nameB) && !isNaN(parseFloat(nameB));
+					
+					// 둘 다 숫자면 숫자로 비교
+					if (isNumA && isNumB) {
+						return parseFloat(nameA) - parseFloat(nameB);
+					}
+					
+					// 하나만 숫자면 숫자를 먼저 
+					if (isNumA && !isNumB) return -1;
+					if (!isNumA && isNumB) return 1;
+					
+					// 둘 다 문자면 커스텀 순서 또는 알파벳 순
+					var indexA = customOrder.indexOf(nameA);
+					var indexB = customOrder.indexOf(nameB);
+					
+					// 둘 다 커스텀 순서에 있으면 커스텀 순서 사용
+					if (indexA !== -1 && indexB !== -1) {
+						return indexA - indexB;
+					}
+					
+					// 하나만 커스텀 순서에 있으면 그것을 먼저
+					if (indexA !== -1 && indexB === -1) return -1;
+					if (indexA === -1 && indexB !== -1) return 1;
+					
+					// 둘 다 커스텀 순서에 없으면 알파벳 순
+					return nameA.localeCompare(nameB);
+				});
+				
+				// 현재 규칙 순서 로깅
+				var currentOrder = [];
+				for (var k = 0; k < ruleSections.length; k++) {
+					currentOrder.push(ruleSections[k].name || 'unnamed');
+				}
+				console.log('🎯 [FIREWALL-DEBUG] Current rule order:', currentOrder);
+				
+				// 목표 규칙 순서 로깅
+				var targetOrder = [];
+				for (var k = 0; k < sortedRules.length; k++) {
+					targetOrder.push(sortedRules[k].name || 'unnamed');
+				}
+				console.log('🎯 [FIREWALL-DEBUG] Target rule order:', targetOrder);
+				
+				// 정렬이 필요한지 확인
+				var needsReordering = false;
+				for (var i = 0; i < ruleSections.length; i++) {
+					if (ruleSections[i]['.name'] !== sortedRules[i]['.name']) {
+						needsReordering = true;
+						break;
+					}
+				}
+				
+				if (needsReordering) {
+					console.log('🎯 [FIREWALL-DEBUG] Rules need reordering, using uci.move()...');
+					
+					// 마지막 non-rule 섹션 찾기 (규칙들이 그 다음에 위치해야 함)
+					var lastNonRuleSection = null;
+					for (var j = 0; j < allSections.length; j++) {
+						if (allSections[j]['.type'] !== 'rule') {
+							lastNonRuleSection = allSections[j]['.name'];
+						} else {
+							break;
+						}
+					}
+					
+					// 정렬된 순서대로 규칙들을 이동
+					var previousSection = lastNonRuleSection;
+					for (var i = 0; i < sortedRules.length; i++) {
+						var targetRule = sortedRules[i];
+						
+						if (previousSection) {
+							console.log('🎯 [FIREWALL-DEBUG] Moving rule', targetRule.name, 'after', previousSection);
+							uci.move('firewall', targetRule['.name'], previousSection, true);
+						}
+						
+						previousSection = targetRule['.name'];
+					}
+				} else {
+					console.log('🎯 [FIREWALL-DEBUG] Rules are already in correct order');
+				}
+				
+				console.log('🎯 [FIREWALL-DEBUG] ✅ Rule sorting completed');
+			} else {
+				console.log('🎯 [FIREWALL-DEBUG] Less than 2 rules, no rule sorting needed');
+			}
+			
+			// PBR 섹션을 마지막으로 이동
+			if (pbrSections.length > 0) {
+				console.log('🎯 [FIREWALL-DEBUG] Moving PBR sections to bottom...');
+				
+				pbrSections.forEach(function(pbrSection) {
+					// PBR 섹션을 맨 마지막으로 이동
+					console.log('🎯 [FIREWALL-DEBUG] Moving PBR section', pbrSection['.name'], 'to bottom');
+					uci.move('firewall', pbrSection['.name'], null, false);
+				});
+				
+				console.log('🎯 [FIREWALL-DEBUG] ✅ PBR sections moved to bottom');
+			}
+			
+			return Promise.resolve();
+		};
+		
+		// 자동 정렬 설정 가져오기
+		this.getAutoSortSetting = function() {
+			try {
+				var setting = localStorage.getItem('firewall_auto_sort');
+				if (setting === null) {
+					// 기본값: 자동 정렬 활성화
+					return true;
+				}
+				return setting === 'true';
+			} catch (e) {
+				console.log('🎯 [FIREWALL-DEBUG] LocalStorage not available, using default auto-sort: true');
+				return true;
+			}
+		};
+		
+		// 자동 정렬 설정 저장하기
+		this.setAutoSortSetting = function(enabled) {
+			try {
+				localStorage.setItem('firewall_auto_sort', enabled.toString());
+				console.log('🎯 [FIREWALL-DEBUG] Auto-sort setting saved:', enabled);
+			} catch (e) {
+				console.log('🎯 [FIREWALL-DEBUG] Failed to save auto-sort setting');
+			}
+		};
+		
+		// PBR만 마지막으로 이동 (규칙 정렬 없이)
+		this.movePBRToBottomOnly = function() {
+			console.log('🎯 [FIREWALL-DEBUG] Moving PBR to bottom only (preserving rule order)...');
+			
+			var allSections = uci.sections('firewall');
+			var pbrSections = [];
+			
+			// PBR 섹션 찾기
+			allSections.forEach(function(section) {
+				if (section['.type'] === 'include' && 
+					(section['.name'] === 'pbr' || 
+					 section.path === '/usr/share/pbr/firewall.include' ||
+					 section['.name'].indexOf('pbr') !== -1)) {
+					pbrSections.push(section);
+					console.log('🎯 [FIREWALL-DEBUG] Found PBR section:', section['.name'], section.path);
+				}
+			});
+			
+			// PBR 섹션을 마지막으로 이동
+			if (pbrSections.length > 0) {
+				console.log('🎯 [FIREWALL-DEBUG] Moving', pbrSections.length, 'PBR sections to bottom...');
+				
+				pbrSections.forEach(function(pbrSection) {
+					console.log('🎯 [FIREWALL-DEBUG] Moving PBR section', pbrSection['.name'], 'to bottom');
+					uci.move('firewall', pbrSection['.name'], null, false);
+				});
+				
+				console.log('🎯 [FIREWALL-DEBUG] ✅ PBR sections moved to bottom');
+			} else {
+				console.log('🎯 [FIREWALL-DEBUG] No PBR sections found');
+			}
+			
+			return Promise.resolve();
 		};
 	},
 
@@ -1589,7 +1945,36 @@ return view.extend({
 			// 헤더 섹션
 			E('div', { 'class': 'control-header' }, [
 				E('h2', {}, _('Firewall - Transmission Control')),
-				E('p', {}, _('Transmission control allows you to configure traffic rules and advanced rule configuration for network transmission management.'))
+				E('p', {}, _('Transmission control allows you to configure traffic rules and advanced rule configuration for network transmission management.')),
+				E('div', { 'style': 'margin-top: 15px; display: flex; align-items: center;' }, [
+					E('label', { 
+						'style': 'margin-right: 10px; color: #495057; font-weight: 500;' 
+					}, _('자동 정렬:')),
+					E('input', { 
+						'type': 'checkbox', 
+						'id': 'auto-sort-checkbox',
+						'checked': true,  // 기본값으로 초기화
+						'style': 'margin-right: 8px;',
+						'change': function() {
+							console.log('🎛️ [FIREWALL-DEBUG] Auto-sort setting changed:', this.checked);
+							self.setAutoSortSetting(this.checked);
+							
+							// 상태 표시 업데이트
+							var statusText = document.getElementById('auto-sort-status');
+							if (statusText) {
+								statusText.textContent = this.checked ? _('활성화') : _('비활성화');
+								statusText.style.color = this.checked ? '#28a745' : '#dc3545';
+							}
+						}
+					}),
+					E('span', { 
+						'id': 'auto-sort-status',
+						'style': 'color: #28a745; font-weight: 500;'  // 기본값으로 초기화
+					}, _('활성화')),
+					E('span', { 
+						'style': 'margin-left: 15px; color: #6c757d; font-size: 13px;' 
+					}, _('(저장 시 규칙을 이름 순으로 자동 정렬합니다)'))
+				])
 			]),
 			
 			// 탭 헤더
@@ -2193,20 +2578,141 @@ return view.extend({
 		// handleSave를 오버라이드하여 Rule Config 저장 포함
 		var originalHandleSave = m.handleSave;
 		m.handleSave = function() {
+			console.log('🚀🚀🚀 [FIREWALL-DEBUG] ===============================');
+			console.log('🚀🚀🚀 [FIREWALL-DEBUG] HANDLESAVE CALLED!');
+			console.log('🚀🚀🚀 [FIREWALL-DEBUG] ===============================');
 			console.log('handleSave called');
 			
 			// Rule Config 변경사항이 있으면 먼저 저장
 			if (self.currentRuleSection) {
-				console.log('Saving Rule Config changes first');
+				console.log('🚀 [FIREWALL-DEBUG] Has currentRuleSection:', self.currentRuleSection);
+				console.log('🚀 [FIREWALL-DEBUG] Saving Rule Config changes first');
 				return self.saveRuleConfig().then(function() {
-					console.log('Rule Config saved, calling original handleSave');
+					console.log('🚀 [FIREWALL-DEBUG] Rule Config saved, calling original handleSave');
 					return originalHandleSave.call(this);
 				}.bind(this));
 			}
 			
-			console.log('No Rule Config changes, calling original handleSave');
+			console.log('🚀 [FIREWALL-DEBUG] No Rule Config changes, calling original handleSave');
 			return originalHandleSave.call(this);
 		};
+		
+		// handleSaveApply도 오버라이드 (저장&적용 버튼용)
+		var originalHandleSaveApply = m.handleSaveApply;
+		if (originalHandleSaveApply) {
+			m.handleSaveApply = function() {
+				console.log('💾💾💾 [FIREWALL-DEBUG] ===============================');
+				console.log('💾💾💾 [FIREWALL-DEBUG] HANDLESAVEAPPLY CALLED!');
+				console.log('💾💾💾 [FIREWALL-DEBUG] ===============================');
+				console.log('handleSaveApply called');
+				
+				// Rule Config 변경사항이 있으면 먼저 저장
+				if (self.currentRuleSection) {
+					console.log('💾 [FIREWALL-DEBUG] Has currentRuleSection:', self.currentRuleSection);
+					console.log('💾 [FIREWALL-DEBUG] Saving Rule Config changes first');
+					return self.saveRuleConfig().then(function() {
+						console.log('💾 [FIREWALL-DEBUG] Rule Config saved, calling original handleSaveApply');
+						return originalHandleSaveApply.call(this);
+					}.bind(this));
+				}
+				
+				console.log('💾 [FIREWALL-DEBUG] No Rule Config changes, calling original handleSaveApply');
+				return originalHandleSaveApply.call(this);
+			};
+		}
+		
+		// 추가로 폼의 save와 apply 메소드도 직접 훅
+		if (m && typeof m.save === 'function' && !m._originalSave) {
+			console.log('🎣 [FIREWALL-DEBUG] Hooking form.save method');
+			m._originalSave = m.save.bind(m);
+			m.save = function() {
+				console.log('📝📝📝 [FIREWALL-DEBUG] ===============================');
+				console.log('📝📝📝 [FIREWALL-DEBUG] FORM.SAVE CALLED!');
+				console.log('📝📝📝 [FIREWALL-DEBUG] ===============================');
+				
+				// 원본 save 실행
+				var result = m._originalSave();
+				
+				// Promise 형태인지 확인
+				if (result && typeof result.then === 'function') {
+					return result.then(function(saveResult) {
+						console.log('📝 [FIREWALL-DEBUG] Form save completed, performing sorting...');
+						return self.performFirewallSorting().then(function() {
+							console.log('📝 [FIREWALL-DEBUG] Sorting after form save completed');
+							return saveResult;
+						});
+					});
+				} else {
+					// 동기 결과인 경우
+					console.log('📝 [FIREWALL-DEBUG] Synchronous form save, performing sorting...');
+					self.performFirewallSorting();
+					return result;
+				}
+			};
+		}
+		
+		if (m && typeof m.apply === 'function' && !m._originalApply) {
+			console.log('🎣 [FIREWALL-DEBUG] Hooking form.apply method');
+			m._originalApply = m.apply.bind(m);
+			m.apply = function() {
+				console.log('⚡⚡⚡ [FIREWALL-DEBUG] ===============================');
+				console.log('⚡⚡⚡ [FIREWALL-DEBUG] FORM.APPLY CALLED!');
+				console.log('⚡⚡⚡ [FIREWALL-DEBUG] ===============================');
+				
+				// 먼저 정렬 수행 후 apply
+				return self.performFirewallSorting().then(function() {
+					console.log('⚡ [FIREWALL-DEBUG] Sorting completed, calling original apply');
+					return m._originalApply();
+				}).catch(function(err) {
+					console.error('⚡ [FIREWALL-DEBUG] Sorting failed, still calling apply:', err);
+					return m._originalApply();
+				});
+			};
+		}
+		
+		// 전역 버튼 클릭 이벤트 리스너 추가 (모든 가능성 커버)
+		setTimeout(function() {
+			console.log('🎣 [FIREWALL-DEBUG] Setting up global button click listeners');
+			
+			// 저장&적용 버튼 감지
+			var saveApplyButtons = document.querySelectorAll('button, input[type="button"], input[type="submit"]');
+			saveApplyButtons.forEach(function(button) {
+				if (button.textContent && 
+				    (button.textContent.includes('저장') || 
+				     button.textContent.includes('Save') || 
+				     button.textContent.includes('Apply') ||
+				     button.textContent.includes('적용'))) {
+					
+					console.log('🎣 [FIREWALL-DEBUG] Found save/apply button:', button.textContent);
+					
+					// 기존 이벤트가 있다면 백업
+					if (!button._originalOnClick) {
+						button._originalOnClick = button.onclick;
+						
+						button.onclick = function(event) {
+							console.log('🔘🔘🔘 [FIREWALL-DEBUG] ===============================');
+							console.log('🔘🔘🔘 [FIREWALL-DEBUG] BUTTON CLICKED:', button.textContent);
+							console.log('🔘🔘🔘 [FIREWALL-DEBUG] ===============================');
+							
+							// 정렬 수행
+							self.performFirewallSorting().then(function() {
+								console.log('🔘 [FIREWALL-DEBUG] Button click sorting completed');
+								// 원본 클릭 이벤트 실행
+								if (button._originalOnClick) {
+									return button._originalOnClick.call(this, event);
+								}
+							}).catch(function(err) {
+								console.error('🔘 [FIREWALL-DEBUG] Button click sorting failed:', err);
+								// 실패해도 원본 이벤트 실행
+								if (button._originalOnClick) {
+									return button._originalOnClick.call(this, event);
+								}
+							});
+						};
+					}
+				}
+			});
+		}, 1000);
 		
 		// Traffic rules 비동기 렌더링
 		m.render().then(function(rulesHTML) {
@@ -2230,6 +2736,21 @@ return view.extend({
 				self.updateInterfaceDropdown();
 				console.log('Network interfaces applied:', self.currentNetworkInterfaces);
 			}
+			
+			// 자동 정렬 설정 불러와서 UI 업데이트
+			var autoSortEnabled = self.getAutoSortSetting();
+			var checkbox = document.getElementById('auto-sort-checkbox');
+			var statusText = document.getElementById('auto-sort-status');
+			
+			if (checkbox) {
+				checkbox.checked = autoSortEnabled;
+			}
+			if (statusText) {
+				statusText.textContent = autoSortEnabled ? _('활성화') : _('비활성화');
+				statusText.style.color = autoSortEnabled ? '#28a745' : '#dc3545';
+			}
+			
+			console.log('🎛️ [FIREWALL-DEBUG] Auto-sort setting loaded:', autoSortEnabled);
 		}, 100);
 		
 		return container;

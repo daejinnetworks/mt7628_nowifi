@@ -50,7 +50,7 @@ if [ -s '/usr/share/pbr/firewall.include' ]; then
 uci -q batch <<-EOT
 	delete firewall.pbr
 	set firewall.pbr='include'
-	set firewall.pbr.fw4_compatible='1'
+	set firewall.pbr.fw4_compatible='0'
 	set firewall.pbr.type='script'
 	set firewall.pbr.path='/usr/share/pbr/firewall.include'
 	commit firewall
